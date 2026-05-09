@@ -67,7 +67,7 @@ def load_models(model_dir: str = "models/"):
 
     models = {}
 
-    model_path = os.path.join(model_dir, "ft_transformer.keras")
+    model_path = os.path.join(model_dir, "ft_transformer.h5")
     models["model"] = keras.models.load_model(
         model_path, compile=False)
 
