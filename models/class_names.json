@@ -1,7 +1,12 @@
 [
+  "backdoor",
   "ddos",
   "dos",
   "injection",
+  "mitm",
   "normal",
-  "scanning"
+  "password",
+  "ransomware",
+  "scanning",
+  "xss"
 ]
