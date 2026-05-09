@@ -101,7 +101,7 @@ with st.sidebar:
 
 # ── تحميل النماذج ──────────────────────────────────────────────
 @st.cache_resource
-def load_models_cached():
+def load_models_cached(version="v3"):
     """تحميل النماذج مرة واحدة فقط"""
     try:
         from inference import load_models
@@ -172,7 +172,7 @@ with tab1:
                      use_container_width=True):
 
             # تحميل النماذج
-            models, err = load_models_cached()
+            models, err = load_models_cached(version="v3")
             if err:
                 st.error(f"❌ خطأ في تحميل النماذج: {err}")
                 st.info("💡 تأكد من رفع ملفات النماذج في مجلد models/")
