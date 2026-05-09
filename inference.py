@@ -19,58 +19,102 @@ def load_models(model_dir: str = "models/"):
     import tensorflow as tf
     from tensorflow import keras
 
-    @tf.keras.utils.register_keras_serializable()
-    class FeatureTokenizer(tf.keras.layers.Layer):
+    models = {}
+
+    # ── بناء النموذج من الأوزان مباشرة ───────────────────────
+    weights_path = os.path.join(model_dir, "model_weights.npy")
+    weights = np.load(weights_path, allow_pickle=True)
+
+    # قراءة عدد الـ features والـ classes من الأوزان
+    # W shape = (n_feat, dim) → n_feat
+    n_feat  = weights[0].shape[0]
+    # آخر Dense layer shape = (64, n_class) → n_class
+    n_class = weights[-1].shape[1]
+    dim     = 128
+    n_heads = 4
+    n_layers = 3
+    dropout  = 0.15
+
+    print(f"Building model: n_feat={n_feat} n_class={n_class}")
+
+    # ── بناء Architecture ─────────────────────────────────────
+    class FeatureTokenizerV2(keras.layers.Layer):
         def __init__(self, n_feat, dim, **kw):
             super().__init__(**kw)
             self.n_feat = n_feat
             self.dim    = dim
-
-        def build(self, _):
+        def build(self, input_shape):
             self.W = self.add_weight(
                 name="W", shape=(self.n_feat, self.dim),
                 initializer="glorot_uniform", trainable=True)
             self.b = self.add_weight(
                 name="b", shape=(self.n_feat, self.dim),
                 initializer="zeros", trainable=True)
-            super().build(_)
-
+            super().build(input_shape)
         def call(self, x):
             return tf.expand_dims(x, -1) * self.W + self.b
-
         def get_config(self):
             cfg = super().get_config()
             cfg.update({"n_feat": self.n_feat, "dim": self.dim})
             return cfg
 
-    @tf.keras.utils.register_keras_serializable()
-    class CLSToken(tf.keras.layers.Layer):
+    class CLSTokenV2(keras.layers.Layer):
         def __init__(self, dim, **kw):
             super().__init__(**kw)
             self.dim = dim
-
-        def build(self, _):
-            self.cls = self.add_weight(
+        def build(self, input_shape):
+            self.cls_token = self.add_weight(
                 name="cls", shape=(1, 1, self.dim),
                 initializer="random_normal", trainable=True)
-            super().build(_)
-
+            super().build(input_shape)
         def call(self, x):
-            return tf.concat(
-                [tf.tile(self.cls, [tf.shape(x)[0], 1, 1]), x],
-                axis=1)
-
+            batch = tf.shape(x)[0]
+            cls   = tf.tile(self.cls_token, [batch, 1, 1])
+            return tf.concat([cls, x], axis=1)
         def get_config(self):
             cfg = super().get_config()
             cfg.update({"dim": self.dim})
             return cfg
 
-    models = {}
+    inputs = keras.Input(shape=(n_feat,), name="features")
+    x = FeatureTokenizerV2(n_feat, dim, name="tokenizer")(inputs)
+    x = CLSTokenV2(dim, name="cls_token")(x)
 
-    model_path = os.path.join(model_dir, "ft_transformer.h5")
-    models["model"] = keras.models.load_model(
-        model_path, compile=False)
+    for i in range(n_layers):
+        attn = keras.layers.MultiHeadAttention(
+            num_heads=n_heads, key_dim=dim//n_heads,
+            name=f"attn_{i}")(x, x)
+        attn = keras.layers.Dropout(dropout)(attn)
+        x    = keras.layers.Add()([x, attn])
+        x    = keras.layers.LayerNormalization(
+            epsilon=1e-3)(x)
+        ff   = keras.layers.Dense(
+            dim*4, activation="gelu",
+            name=f"ff1_{i}")(x)
+        ff   = keras.layers.Dropout(dropout)(ff)
+        ff   = keras.layers.Dense(dim, name=f"ff2_{i}")(ff)
+        x    = keras.layers.Add()([x, ff])
+        x    = keras.layers.LayerNormalization(
+            epsilon=1e-3)(x)
 
+    cls_out = x[:, 0, :]
+    out = keras.layers.Dense(
+        64, activation="gelu")(cls_out)
+    out = keras.layers.Dropout(dropout)(out)
+    out = keras.layers.Dense(
+        n_class, activation="softmax",
+        name="output")(out)
+
+    model = keras.Model(inputs, out, name="FT_Transformer")
+
+    # ── تحميل الأوزان ─────────────────────────────────────────
+    model.set_weights(list(weights))
+    print(f"✅ Model loaded: {model.count_params():,} params")
+
+    models["model"]    = model
+    models["n_features"] = n_feat
+
+    # ── بقية الملفات ──────────────────────────────────────────
     with open(os.path.join(model_dir, "scaler.pkl"), "rb") as f:
         models["scaler"] = pickle.load(f)
 
@@ -81,10 +125,10 @@ def load_models(model_dir: str = "models/"):
     models["features"] = [
         x for x in feats if not (x in seen or seen.add(x))]
 
-    with open(os.path.join(model_dir, "class_names.json")) as f:
+    with open(os.path.join(
+            model_dir, "class_names.json")) as f:
         models["class_names"] = json.load(f)
 
-    models["n_features"] = models["model"].input_shape[1]
     return models
 
 
