@@ -1,14 +1,14 @@
 [
   "src_ip_bytes",
-  "dst_pkts",
   "dst_port",
   "dst_ip_bytes",
-  "src_pkts",
-  "duration",
   "src_port",
+  "dst_pkts",
+  "src_pkts",
   "dst_bytes",
-  "dns_qclass",
+  "duration",
   "dns_qtype",
-  "missed_bytes",
-  "dns_rcode"
+  "dns_qclass",
+  "dns_rcode",
+  "missed_bytes"
 ]
