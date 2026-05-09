@@ -2,18 +2,16 @@
 # inference.py — AI Agents IDS Inference Module
 # ================================================================
 
-import pickle, json, re
+import pickle, json, os
 import numpy as np
 import pandas as pd
 from collections import Counter
 import matplotlib.pyplot as plt
-import matplotlib.gridspec as gridspec
 import seaborn as sns
 from sklearn.metrics import (
     classification_report, confusion_matrix,
     accuracy_score, f1_score)
 from datetime import datetime
-import os
 
 
 def load_models(model_dir: str = "models/"):
@@ -21,14 +19,13 @@ def load_models(model_dir: str = "models/"):
     import tensorflow as tf
     from tensorflow import keras
 
-    models = {}
-
-    # FT-Transformer
+    @tf.keras.utils.register_keras_serializable()
     class FeatureTokenizer(tf.keras.layers.Layer):
         def __init__(self, n_feat, dim, **kw):
             super().__init__(**kw)
             self.n_feat = n_feat
-            self.dim = dim
+            self.dim    = dim
+
         def build(self, _):
             self.W = self.add_weight(
                 name="W", shape=(self.n_feat, self.dim),
@@ -37,44 +34,48 @@ def load_models(model_dir: str = "models/"):
                 name="b", shape=(self.n_feat, self.dim),
                 initializer="zeros", trainable=True)
             super().build(_)
+
         def call(self, x):
             return tf.expand_dims(x, -1) * self.W + self.b
+
         def get_config(self):
             cfg = super().get_config()
             cfg.update({"n_feat": self.n_feat, "dim": self.dim})
             return cfg
 
+    @tf.keras.utils.register_keras_serializable()
     class CLSToken(tf.keras.layers.Layer):
         def __init__(self, dim, **kw):
             super().__init__(**kw)
             self.dim = dim
+
         def build(self, _):
             self.cls = self.add_weight(
                 name="cls", shape=(1, 1, self.dim),
                 initializer="random_normal", trainable=True)
             super().build(_)
+
         def call(self, x):
             return tf.concat(
                 [tf.tile(self.cls, [tf.shape(x)[0], 1, 1]), x],
                 axis=1)
+
         def get_config(self):
             cfg = super().get_config()
             cfg.update({"dim": self.dim})
             return cfg
 
+    models = {}
+
     model_path = os.path.join(model_dir, "ft_transformer.keras")
     models["model"] = keras.models.load_model(
-        model_path,
-        compile=False,
-        custom_objects={
-            "FeatureTokenizer": FeatureTokenizer,
-            "CLSToken": CLSToken,
-        })
+        model_path, compile=False)
 
     with open(os.path.join(model_dir, "scaler.pkl"), "rb") as f:
         models["scaler"] = pickle.load(f)
 
-    with open(os.path.join(model_dir, "selected_features.json")) as f:
+    with open(os.path.join(
+            model_dir, "selected_features.json")) as f:
         feats = json.load(f)
     seen = set()
     models["features"] = [
@@ -100,10 +101,12 @@ def auto_exclude(df, label_col, benign_label):
     removed = {}
 
     if label_col in df.columns:
-        df["_lb"] = (df[label_col] != benign_label).astype(int)
+        df["_lb"] = (
+            df[label_col] != benign_label).astype(int)
         excl.append("_lb")
 
-    num_df = df.select_dtypes(include=[float, int, "int64", "float64"])
+    num_df = df.select_dtypes(
+        include=[float, int, "int64", "float64"])
 
     # 1. Data Leakage
     if "_lb" in df.columns:
@@ -126,7 +129,8 @@ def auto_exclude(df, label_col, benign_label):
     # 3. Sequential IDs
     for col in num_df.columns:
         if col in excl: continue
-        sv = df[col].dropna().sort_values().reset_index(drop=True)
+        sv = df[col].dropna().sort_values(
+            ).reset_index(drop=True)
         if len(sv) > 100:
             diffs = sv.diff().dropna()
             if (len(diffs) > 0 and
@@ -149,7 +153,8 @@ def auto_exclude(df, label_col, benign_label):
         vc = df[col].value_counts(normalize=True)
         if len(vc) > 0 and vc.iloc[0] > 0.999:
             excl.append(col)
-            removed[col] = f"near-constant ({vc.iloc[0]*100:.1f}%)"
+            removed[col] = (
+                f"near-constant ({vc.iloc[0]*100:.1f}%)")
 
     if "_lb" in df.columns:
         df = df.drop(columns=["_lb"])
@@ -177,18 +182,15 @@ def align_features(df, avail, features, n_model):
 
 def run_inference(df, models, label_col, benign_label,
                   ft_unk_thr=0.60):
-    """
-    تشغيل الـ inference على dataframe.
-    يرجع dict بالنتائج الكاملة.
-    """
+    """تشغيل الـ inference على dataframe"""
     t0 = datetime.now()
 
     # تنظيف
-    df_clean, avail, removed = auto_exclude(df, label_col, benign_label)
+    df_clean, avail, removed = auto_exclude(
+        df, label_col, benign_label)
 
     # features
-    n_model  = models["n_model"] if "n_model" in models \
-               else models["n_features"]
+    n_model = models["n_features"]
     X_raw, matched, missing = align_features(
         df_clean, avail, models["features"], n_model)
 
@@ -225,7 +227,8 @@ def run_inference(df, models, label_col, benign_label,
 
     # إحصاءات
     total   = len(y_pred_names)
-    benign  = sum(1 for p in y_pred_names if p == benign_label)
+    benign  = sum(1 for p in y_pred_names
+                  if p == benign_label)
     unknown = int(y_unk.sum())
     attacks = total - benign - unknown
 
@@ -238,16 +241,18 @@ def run_inference(df, models, label_col, benign_label,
     if label_col in df.columns:
         y_true = df[label_col].values[:len(y_pred_names)]
         try:
-            metrics["accuracy"]    = accuracy_score(y_true, y_pred_names)
+            metrics["accuracy"]    = accuracy_score(
+                y_true, y_pred_names)
             metrics["weighted_f1"] = f1_score(
-                y_true, y_pred_names, average="weighted",
-                zero_division=0)
+                y_true, y_pred_names,
+                average="weighted", zero_division=0)
             metrics["macro_f1"]    = f1_score(
-                y_true, y_pred_names, average="macro",
-                zero_division=0)
+                y_true, y_pred_names,
+                average="macro", zero_division=0)
             metrics["report"]      = classification_report(
                 y_true, y_pred_names,
-                labels=sorted(set(y_true) | set(y_pred_names)),
+                labels=sorted(
+                    set(y_true) | set(y_pred_names)),
                 zero_division=0)
             metrics["cm_true"]     = y_true
         except Exception as e:
@@ -280,52 +285,58 @@ def make_plots(results, benign_label, out_dir="plots/"):
 
     y_pred = results["y_pred"]
     y_conf = results["y_conf"]
-    y_unk  = results["y_unknown"]
     total  = results["n_samples"]
     benign = results["n_benign"]
     atks   = results["n_attacks"]
     unk    = results["n_unknown"]
 
     plt.rcParams.update({
-        "figure.dpi": 120, "font.size": 11,
-        "figure.facecolor": "white"})
+        "figure.dpi"        : 120,
+        "font.size"         : 11,
+        "figure.facecolor"  : "white",
+    })
 
     # ── 1. Pie ─────────────────────────────────────────────────
     fig, ax = plt.subplots(figsize=(7, 6))
     sizes  = [benign, atks, unk]
     labels = ["Benign", "Attack", "Unknown"]
     colors = ["#2ecc71", "#e74c3c", "#f39c12"]
-    ax.pie([max(s,1) for s in sizes],
+    ax.pie([max(s, 1) for s in sizes],
            labels=labels, colors=colors,
            autopct="%1.1f%%", startangle=140,
-           explode=(0.02,0.05,0.05), shadow=True)
-    ax.set_title(f"Decision Distribution\nTotal: {total:,}",
-                 fontweight="bold")
+           explode=(0.02, 0.05, 0.05), shadow=True)
+    ax.set_title(
+        f"Decision Distribution\nTotal: {total:,}",
+        fontweight="bold")
     p = os.path.join(out_dir, "pie.png")
-    fig.savefig(p, bbox_inches="tight"); plt.close()
+    fig.savefig(p, bbox_inches="tight")
+    plt.close()
     paths.append(("Decision Distribution", p))
 
     # ── 2. Attack Bar ──────────────────────────────────────────
     if results["atk_counts"]:
         fig, ax = plt.subplots(figsize=(10, 6))
-        top = results["atk_counts"].most_common(15)
-        names = [x[0] for x in top]
-        vals  = [x[1] for x in top]
+        top    = results["atk_counts"].most_common(15)
+        names  = [x[0] for x in top]
+        vals   = [x[1] for x in top]
         colors_b = plt.cm.Reds_r(
-            [0.3 + 0.5*(i/len(names)) for i in range(len(names))])
+            [0.3 + 0.5*(i/max(len(names), 1))
+             for i in range(len(names))])
         ax.barh(names, vals, color=colors_b, alpha=0.85)
         for i, v in enumerate(vals):
             ax.text(v + max(vals)*0.01, i,
                     f"{v:,}", va="center", fontsize=9)
         ax.set_xlabel("Count")
-        ax.set_title("Top Attack Types Detected", fontweight="bold")
+        ax.set_title("Top Attack Types Detected",
+                     fontweight="bold")
         ax.set_xlim(0, max(vals)*1.15)
         plt.tight_layout()
         p = os.path.join(out_dir, "attacks.png")
-        fig.savefig(p, bbox_inches="tight"); plt.close()
+        fig.savefig(p, bbox_inches="tight")
+        plt.close()
         paths.append(("Attack Types", p))
 
-    # ── 3. Confidence Distribution ─────────────────────────────
+    # ── 3. Confidence ──────────────────────────────────────────
     fig, ax = plt.subplots(figsize=(10, 4))
     n = min(3000, len(y_conf))
     colors_s = ["#2ecc71" if p == benign_label
@@ -336,32 +347,40 @@ def make_plots(results, benign_label, out_dir="plots/"):
                lw=1.5, label="Unknown threshold=0.60")
     ax.set_xlabel("Sample Index")
     ax.set_ylabel("Confidence")
-    ax.set_title("Prediction Confidence", fontweight="bold")
+    ax.set_title("Prediction Confidence",
+                 fontweight="bold")
     ax.legend()
     plt.tight_layout()
     p = os.path.join(out_dir, "confidence.png")
-    fig.savefig(p, bbox_inches="tight"); plt.close()
+    fig.savefig(p, bbox_inches="tight")
+    plt.close()
     paths.append(("Confidence", p))
 
-    # ── 4. Confusion Matrix (لو عندنا labels) ──────────────────
+    # ── 4. Confusion Matrix ────────────────────────────────────
     m = results["metrics"]
     if "cm_true" in m:
         try:
-            y_true = m["cm_true"]
-            present = sorted(set(y_true) | set(y_pred))[:15]
-            cm = confusion_matrix(y_true, y_pred, labels=present)
+            y_true  = m["cm_true"]
+            present = sorted(
+                set(y_true) | set(y_pred))[:15]
+            cm = confusion_matrix(
+                y_true, y_pred, labels=present)
             sz = max(7, len(present))
             fig, ax = plt.subplots(figsize=(sz+1, sz))
-            sns.heatmap(cm, annot=True, fmt="d", cmap="Blues",
+            sns.heatmap(cm, annot=True, fmt="d",
+                        cmap="Blues",
                         xticklabels=present,
                         yticklabels=present,
                         annot_kws={"size": 8}, ax=ax)
-            ax.set_title("Confusion Matrix", fontweight="bold")
-            ax.set_ylabel("True"); ax.set_xlabel("Predicted")
+            ax.set_title("Confusion Matrix",
+                         fontweight="bold")
+            ax.set_ylabel("True")
+            ax.set_xlabel("Predicted")
             plt.xticks(rotation=45, ha="right")
             plt.tight_layout()
             p = os.path.join(out_dir, "cm.png")
-            fig.savefig(p, bbox_inches="tight"); plt.close()
+            fig.savefig(p, bbox_inches="tight")
+            plt.close()
             paths.append(("Confusion Matrix", p))
         except Exception:
             pass
