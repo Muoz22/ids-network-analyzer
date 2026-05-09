@@ -101,11 +101,14 @@ with st.sidebar:
 
 # ── تحميل النماذج ──────────────────────────────────────────────
 @st.cache_resource
-def load_models_cached(version="v3"):
-    """تحميل النماذج مرة واحدة فقط"""
+def load_models_cached(version="v4"):
     try:
         from inference import load_models
         models = load_models(model_dir="models/")
+        # Debug info
+        st.sidebar.write(f"🔍 Debug:")
+        st.sidebar.write(f"Classes: {models['class_names']}")
+        st.sidebar.write(f"Features: {len(models['features'])}")
         return models, None
     except Exception as e:
         return None, str(e)
@@ -172,7 +175,7 @@ with tab1:
                      use_container_width=True):
 
             # تحميل النماذج
-            models, err = load_models_cached(version="v3")
+            models, err = load_models_cached(version="v4")
             if err:
                 st.error(f"❌ خطأ في تحميل النماذج: {err}")
                 st.info("💡 تأكد من رفع ملفات النماذج في مجلد models/")
