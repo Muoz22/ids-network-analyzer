@@ -16,38 +16,51 @@ from datetime import datetime
 
 def load_models(model_dir: str = "models/"):
     import onnxruntime as ort
+    import json
 
     models = {}
 
-    # ONNX model
-    path = os.path.join(model_dir, "model.onnx")
-    sess = ort.InferenceSession(path)
+    # ── Metadata v3 ───────────────────────────────────────────
+    meta_path = os.path.join(model_dir, "metadata_v3.json")
+    if os.path.exists(meta_path):
+        with open(meta_path) as f:
+            meta = json.load(f)
+        models["meta"]        = meta
+        models["features"]    = meta["feat_cols"]
+        models["class_names"] = meta["class_names"]
+        models["n_features"]  = meta["n_features"]
+        print(f"✅ metadata_v3.json loaded")
+        print(f"   features: {meta['feat_cols']}")
+        print(f"   classes : {meta['class_names']}")
+    else:
+        # fallback للملفات القديمة
+        with open(os.path.join(
+                model_dir, "selected_features.json")) as f:
+            feats = json.load(f)
+        seen = set()
+        models["features"] = [
+            x for x in feats
+            if not (x in seen or seen.add(x))]
+        with open(os.path.join(
+                model_dir, "class_names.json")) as f:
+            models["class_names"] = json.load(f)
+        models["n_features"] = len(models["features"])
+
+    # ── ONNX model ────────────────────────────────────────────
+    sess = ort.InferenceSession(
+        os.path.join(model_dir, "model.onnx"))
     models["session"]     = sess
     models["input_name"]  = sess.get_inputs()[0].name
     models["output_name"] = sess.get_outputs()[0].name
-    models["n_features"]  = sess.get_inputs()[0].shape[1]
-    print(f"✅ ONNX: input={models['n_features']} features")
+    print(f"✅ ONNX loaded: "
+          f"input={sess.get_inputs()[0].shape}")
 
-    # Scaler
-    with open(os.path.join(model_dir, "scaler.pkl"), "rb") as f:
+    # ── Scaler ────────────────────────────────────────────────
+    with open(os.path.join(model_dir, "scaler.pkl"),
+              "rb") as f:
         models["scaler"] = pickle.load(f)
-    print(f"✅ Scaler: {models['scaler'].n_features_in_} features")
-
-    # Features
-    with open(os.path.join(
-            model_dir, "selected_features.json")) as f:
-        feats = json.load(f)
-    seen = set()
-    models["features"] = [
-        x for x in feats if not (x in seen or seen.add(x))]
-    models["features"] = models["features"][:models["n_features"]]
-    print(f"✅ Features ({len(models['features'])}): "
-          f"{models['features']}")
-
-    # Class names
-    with open(os.path.join(model_dir, "class_names.json")) as f:
-        models["class_names"] = json.load(f)
-    print(f"✅ Classes: {models['class_names']}")
+    print(f"✅ Scaler: "
+          f"{models['scaler'].n_features_in_} features")
 
     return models
 
