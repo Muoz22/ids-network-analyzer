@@ -263,75 +263,88 @@ def make_plots(results, benign_label, out_dir="plots/"):
         "figure.facecolor": "white"})
 
     # ── 1. Decision Pie ───────────────────────────────────────
-    fig, ax = plt.subplots(figsize=(7, 6))
-    ax.pie(
-        [max(s,1) for s in [benign, atks, unk]],
-        labels=["Benign","Attack","Unknown"],
-        colors=["#2ecc71","#e74c3c","#f39c12"],
-        autopct="%1.1f%%", startangle=140,
-        explode=(0.02,0.05,0.05), shadow=True)
-    ax.set_title(
-        f"Decision Distribution\nTotal: {total:,}",
-        fontweight="bold")
-    p = os.path.join(out_dir, "pie.png")
-    fig.savefig(p, bbox_inches="tight"); plt.close()
-    paths.append(("Decision Distribution", p))
+    try:
+        fig, ax = plt.subplots(figsize=(7, 6))
+        ax.pie(
+            [max(s,1) for s in [benign, atks, unk]],
+            labels=["Benign","Attack","Unknown"],
+            colors=["#2ecc71","#e74c3c","#f39c12"],
+            autopct="%1.1f%%", startangle=140,
+            explode=(0.02,0.05,0.05), shadow=True)
+        ax.set_title(
+            f"Decision Distribution\nTotal: {total:,}",
+            fontweight="bold")
+        p = os.path.join(out_dir, "pie.png")
+        fig.savefig(p, bbox_inches="tight")
+        plt.close()
+        paths.append(("Decision Distribution", p))
+    except Exception:
+        pass
 
     # ── 2. Attack Bar ─────────────────────────────────────────
-    if results["atk_counts"]:
-        fig, ax = plt.subplots(figsize=(10, 6))
-        top  = results["atk_counts"].most_common(15)
-        nms  = [x[0] for x in top]
-        vals = [x[1] for x in top]
-        cols = plt.cm.Reds_r(
-            [0.3+0.5*(i/max(len(nms),1))
-             for i in range(len(nms))])
-        ax.barh(nms, vals, color=cols, alpha=0.85)
-        for i, v in enumerate(vals):
-            ax.text(v+max(vals)*0.01, i,
-                    f"{v:,}", va="center", fontsize=9)
-        ax.set_xlabel("Count")
-        ax.set_title("Top Attack Types",
-                     fontweight="bold")
-        ax.set_xlim(0, max(vals)*1.15)
-        plt.tight_layout()
-        p = os.path.join(out_dir, "attacks.png")
-        fig.savefig(p, bbox_inches="tight"); plt.close()
-        paths.append(("Attack Types", p))
+    try:
+        if results["atk_counts"]:
+            fig, ax = plt.subplots(figsize=(10, 6))
+            top  = results["atk_counts"].most_common(15)
+            nms  = [x[0] for x in top]
+            vals = [x[1] for x in top]
+            cols = plt.cm.Reds_r(
+                [0.3+0.5*(i/max(len(nms),1))
+                 for i in range(len(nms))])
+            ax.barh(nms, vals, color=cols, alpha=0.85)
+            for i, v in enumerate(vals):
+                ax.text(v+max(vals)*0.01, i,
+                        f"{v:,}", va="center", fontsize=9)
+            ax.set_xlabel("Count")
+            ax.set_title("Top Attack Types",
+                         fontweight="bold")
+            ax.set_xlim(0, max(vals)*1.15)
+            plt.tight_layout()
+            p = os.path.join(out_dir, "attacks.png")
+            fig.savefig(p, bbox_inches="tight")
+            plt.close()
+            paths.append(("Attack Types", p))
+    except Exception:
+        pass
 
     # ── 3. Confidence ─────────────────────────────────────────
-    fig, axes = plt.subplots(1, 2, figsize=(14, 5))
-    n = min(3000, len(y_conf))
-    c = ["#2ecc71" if p==benign_label
-         else "#e74c3c" for p in y_pred[:n]]
-    axes[0].scatter(range(n), y_conf[:n],
-                    c=c, alpha=0.4, s=6)
-    axes[0].axhline(thr, color="black", ls="--",
-                    lw=1.5, label=f"Unknown thr={thr}")
-    axes[0].set_xlabel("Sample Index")
-    axes[0].set_ylabel("Confidence")
-    axes[0].set_title("Confidence Timeline",
-                      fontweight="bold")
-    axes[0].legend(); axes[0].grid(alpha=0.3)
+    try:
+        fig, axes = plt.subplots(1, 2, figsize=(14, 5))
+        n = min(3000, len(y_conf))
+        c = ["#2ecc71" if p==benign_label
+             else "#e74c3c" for p in y_pred[:n]]
+        axes[0].scatter(range(n), y_conf[:n],
+                        c=c, alpha=0.4, s=6)
+        axes[0].axhline(thr, color="black", ls="--",
+                        lw=1.5,
+                        label=f"Unknown thr={thr}")
+        axes[0].set_xlabel("Sample Index")
+        axes[0].set_ylabel("Confidence")
+        axes[0].set_title("Confidence Timeline",
+                          fontweight="bold")
+        axes[0].legend(); axes[0].grid(alpha=0.3)
 
-    axes[1].hist(y_conf[~y_unk], bins=50,
-                 color="#3498db", alpha=0.7,
-                 label="Known", density=True)
-    axes[1].hist(y_conf[y_unk], bins=20,
-                 color="#e74c3c", alpha=0.7,
-                 label="Unknown", density=True)
-    axes[1].axvline(thr, color="black",
-                    ls="--", lw=1.5)
-    axes[1].set_xlabel("Confidence")
-    axes[1].set_title("Confidence Distribution",
-                      fontweight="bold")
-    axes[1].legend(); axes[1].grid(alpha=0.3)
-    plt.suptitle("Confidence Analysis",
-                 fontweight="bold")
-    plt.tight_layout()
-    p = os.path.join(out_dir, "confidence.png")
-    fig.savefig(p, bbox_inches="tight"); plt.close()
-    paths.append(("Confidence", p))
+        axes[1].hist(y_conf[~y_unk], bins=50,
+                     color="#3498db", alpha=0.7,
+                     label="Known", density=True)
+        axes[1].hist(y_conf[y_unk], bins=20,
+                     color="#e74c3c", alpha=0.7,
+                     label="Unknown", density=True)
+        axes[1].axvline(thr, color="black",
+                        ls="--", lw=1.5)
+        axes[1].set_xlabel("Confidence")
+        axes[1].set_title("Confidence Distribution",
+                          fontweight="bold")
+        axes[1].legend(); axes[1].grid(alpha=0.3)
+        plt.suptitle("Confidence Analysis",
+                     fontweight="bold")
+        plt.tight_layout()
+        p = os.path.join(out_dir, "confidence.png")
+        fig.savefig(p, bbox_inches="tight")
+        plt.close()
+        paths.append(("Confidence", p))
+    except Exception:
+        pass
 
     # ── 4. Confusion Matrix ───────────────────────────────────
     if "cm_true" in m:
@@ -443,8 +456,9 @@ def make_plots(results, benign_label, out_dir="plots/"):
             [c[:15] for c in top_classes],
             rotation=45, ha="right", fontsize=9)
         ax.set_ylabel("Count")
-        ax.set_title("Prediction Distribution by Class",
-                     fontweight="bold")
+        ax.set_title(
+            "Prediction Distribution by Class",
+            fontweight="bold")
         ax.grid(axis="y", alpha=0.3)
         plt.tight_layout()
         p = os.path.join(out_dir, "class_dist.png")
@@ -693,10 +707,32 @@ def train_custom_model(df, label_col, benign_label,
         X_sc   = scaler.fit_transform(X)
         results["features"] = avail
 
+        # ── احذف الكلاسات النادرة (أقل من 2) ─────────────────
+        counts    = Counter(y)
+        valid_idx = np.array(
+            [i for i, yi in enumerate(y)
+             if counts[yi] >= 2])
+
+        if len(valid_idx) < 50:
+            results["message"] = \
+                "❌ البيانات غير كافية بعد حذف الكلاسات النادرة"
+            return results
+
+        X_sc_f = X_sc[valid_idx]
+        y_f    = y[valid_idx]
+
+        removed_rare = len(y) - len(y_f)
+        if removed_rare > 0:
+            print(f"⚠️ Removed {removed_rare} "
+                  f"rare samples")
+
         # ── Split ─────────────────────────────────────────────
-        stratify = y if len(np.unique(y)) > 1 else None
+        counts_f = Counter(y_f)
+        stratify = y_f if min(
+            counts_f.values()) >= 2 else None
+
         X_tr, X_te, y_tr, y_te = train_test_split(
-            X_sc, y,
+            X_sc_f, y_f,
             test_size=0.2,
             random_state=42,
             stratify=stratify)
