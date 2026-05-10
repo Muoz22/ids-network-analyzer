@@ -100,11 +100,12 @@ with st.sidebar:
         "[GitHub](https://github.com/Muoz22/ids-network-analyzer)")
 
 
-tab1, tab2, tab3, tab4 = st.tabs([
+tab1, tab2, tab3, tab4, tab5 = st.tabs([
     "🔍 تحليل الشبكة",
     "📊 تقرير تفصيلي",
     "📖 كيف يعمل",
     "📋 عن المشروع",
+    "🔧 Train Custom Model",
 ])
 
 
@@ -178,10 +179,23 @@ with tab1:
                 status.text("🤖 تشغيل النماذج...")
                 progress.progress(50)
 
-                results = run_inference(
-                    df, models, label_col,
-                    benign_label,
-                    ft_unk_thr=threshold)
+                if "custom_model" in st.session_state:
+    from inference import run_inference_custom
+    results = run_inference_custom(
+        df,
+        st.session_state["custom_model"],
+        label_col,
+        benign_label,
+        ft_unk_thr=threshold)
+    st.sidebar.success(
+        "🔧 يستخدم النموذج المخصص")
+else:
+    results = run_inference(
+        df, models, label_col,
+        benign_label,
+        ft_unk_thr=threshold)
+    st.sidebar.info(
+        "🔵 يستخدم النموذج الأصلي (TON-IoT)")
 
                 status.text("📊 إنتاج الرسوم...")
                 progress.progress(80)
@@ -617,3 +631,246 @@ with tab4:
         'Built with ❤️ using Streamlit + ONNX Runtime'
         '</p>',
         unsafe_allow_html=True)
+# ══════════════════════════════════════════════════════════════
+# Tab 5 — Train Custom Model
+# ══════════════════════════════════════════════════════════════
+with tab5:
+    st.markdown("## 🔧 Train Custom Model")
+    st.info(
+        "ارفع داتاست جديدة وسيتدرب النظام عليها "
+        "تلقائياً في 30-60 ثانية باستخدام XGBoost. "
+        "النموذج الأصلي لن يتأثر.")
+
+    # ── تحذير ─────────────────────────────────────────────────
+    if "custom_model" in st.session_state:
+        st.success(
+            f"✅ يوجد نموذج مخصص محمّل — "
+            f"Classes: "
+            f"{st.session_state['custom_meta']['classes']}")
+        if st.button("🗑️ حذف النموذج المخصص والرجوع "
+                     "للنموذج الأصلي",
+                     key="btn_delete_custom"):
+            del st.session_state["custom_model"]
+            del st.session_state["custom_meta"]
+            st.success("✅ تم الحذف — النموذج الأصلي نشط")
+            st.rerun()
+
+    st.markdown("---")
+    st.markdown("### 📁 ارفع داتاست التدريب")
+
+    col1, col2 = st.columns([2, 1])
+    with col1:
+        train_file = st.file_uploader(
+            "اختر ملف CSV للتدريب",
+            type=["csv"],
+            key="train_uploader")
+    with col2:
+        st.markdown("""
+        **متطلبات الملف:**
+        - يحتوي على عمود الـ label
+        - على الأقل 500 صف
+        - يفضل 2,000-10,000 صف
+        - أي network traffic features
+        """)
+
+    if train_file is not None:
+        with st.spinner("جاري قراءة الملف..."):
+            try:
+                df_train = pd.read_csv(
+                    train_file, low_memory=False)
+                st.success(
+                    f"✅ تم تحميل الملف: "
+                    f"{df_train.shape[0]:,} صف × "
+                    f"{df_train.shape[1]} عمود")
+            except Exception as e:
+                st.error(f"❌ خطأ: {e}")
+                st.stop()
+
+        with st.expander("👁️ معاينة البيانات",
+                         expanded=False):
+            st.dataframe(df_train.head(5),
+                         use_container_width=True)
+
+        # ── إعدادات التدريب ───────────────────────────────────
+        st.markdown("### ⚙️ إعدادات التدريب")
+        tc1, tc2, tc3 = st.columns(3)
+
+        with tc1:
+            train_label = st.text_input(
+                "عمود الـ Label",
+                value=label_col,
+                key="train_label_col")
+        with tc2:
+            train_benign = st.text_input(
+                "الكلاس الطبيعي",
+                value=benign_label,
+                key="train_benign_label")
+        with tc3:
+            max_rows = st.number_input(
+                "أقصى عدد صفوف للتدريب",
+                min_value=500,
+                max_value=50000,
+                value=10000,
+                step=500)
+
+        # تحقق من الـ label
+        if train_label in df_train.columns:
+            vc = df_train[train_label].value_counts()
+            st.info(
+                f"✅ عمود '{train_label}' موجود — "
+                f"{len(vc)} كلاس: "
+                f"{vc.head(5).to_dict()}")
+
+            # عرض توزيع الكلاسات
+            fig, ax = plt.subplots(figsize=(10, 3))
+            vc.plot(kind="barh", ax=ax,
+                    color="#3498db", alpha=0.8)
+            ax.set_title("توزيع الكلاسات",
+                         fontweight="bold")
+            ax.grid(axis="x", alpha=0.3)
+            plt.tight_layout()
+            st.pyplot(fig)
+            plt.close()
+
+        else:
+            st.warning(
+                f"⚠️ عمود '{train_label}' غير موجود")
+
+        # ── زر التدريب ────────────────────────────────────────
+        st.markdown("---")
+        if st.button("🚀 ابدأ التدريب",
+                     type="primary",
+                     use_container_width=True,
+                     key="btn_train"):
+
+            if train_label not in df_train.columns:
+                st.error(
+                    f"❌ عمود '{train_label}' "
+                    f"غير موجود في الملف")
+                st.stop()
+
+            if len(df_train) < 100:
+                st.error("❌ الداتاست صغيرة جداً — "
+                         "يجب على الأقل 100 صف")
+                st.stop()
+
+            from inference import train_custom_model
+
+            progress = st.progress(0)
+            status   = st.empty()
+
+            with st.spinner(
+                    "🔧 جاري التدريب على CPU..."):
+                status.text("⚙️ تحليل البيانات...")
+                progress.progress(10)
+
+                status.text(
+                    "🔬 Feature Selection...")
+                progress.progress(30)
+
+                status.text(
+                    "🤖 تدريب XGBoost...")
+                progress.progress(50)
+
+                train_results = train_custom_model(
+                    df_train,
+                    label_col    = train_label,
+                    benign_label = train_benign,
+                    max_rows     = max_rows)
+
+                progress.progress(90)
+
+                if train_results["success"]:
+                    # حفظ في session_state
+                    st.session_state[
+                        "custom_model"] = {
+                        "model"   : train_results["model"],
+                        "scaler"  : train_results["scaler"],
+                        "le"      : train_results["le"],
+                        "features": train_results["features"],
+                    }
+                    st.session_state[
+                        "custom_meta"] = {
+                        "classes"  : train_results["classes"],
+                        "n_classes": train_results["n_classes"],
+                        "n_samples": train_results["n_samples"],
+                        "features" : train_results["features"],
+                        "metrics"  : train_results["metrics"],
+                        "label_col"    : train_label,
+                        "benign_label" : train_benign,
+                    }
+
+                    progress.progress(100)
+                    status.text("✅ اكتمل التدريب!")
+
+                    # ── نتائج التدريب ─────────────────────────
+                    st.markdown("---")
+                    st.markdown("## 🏆 نتائج التدريب")
+
+                    m = train_results["metrics"]
+                    rc1, rc2, rc3 = st.columns(3)
+                    with rc1:
+                        acc = m["accuracy"]*100
+                        cl  = ("status-excellent"
+                               if acc>90 else
+                               "status-good" if acc>80
+                               else "status-warning")
+                        st.markdown(
+                            f'<p class="metric-value {cl}">'
+                            f'{acc:.2f}%</p>'
+                            f'<p class="metric-label">'
+                            f'Accuracy</p>',
+                            unsafe_allow_html=True)
+                    with rc2:
+                        wf1 = m["weighted_f1"]*100
+                        st.markdown(
+                            f'<p class="metric-value '
+                            f'status-good">{wf1:.2f}%</p>'
+                            f'<p class="metric-label">'
+                            f'Weighted F1</p>',
+                            unsafe_allow_html=True)
+                    with rc3:
+                        mf1 = m["macro_f1"]*100
+                        cl2 = ("status-excellent"
+                               if mf1>80 else
+                               "status-good" if mf1>60
+                               else "status-warning")
+                        st.markdown(
+                            f'<p class="metric-value {cl2}">'
+                            f'{mf1:.2f}%</p>'
+                            f'<p class="metric-label">'
+                            f'Macro F1</p>',
+                            unsafe_allow_html=True)
+
+                    # معلومات إضافية
+                    ic1, ic2, ic3 = st.columns(3)
+                    with ic1:
+                        st.metric(
+                            "عدد الكلاسات",
+                            train_results["n_classes"])
+                    with ic2:
+                        st.metric(
+                            "عدد الـ Features",
+                            len(train_results["features"]))
+                    with ic3:
+                        st.metric(
+                            "عدد العينات",
+                            f"{train_results['n_samples']:,}")
+
+                    st.markdown(
+                        "### 📋 Classification Report")
+                    st.code(m["report"])
+
+                    if train_results["removed_cols"]:
+                        st.info(
+                            f"**أعمدة مستُبعدت:** "
+                            f"{list(train_results['removed_cols'].keys())}")
+
+                    st.success(
+                        "✅ النموذج المخصص جاهز! "
+                        "انتقل لـ **🔍 تحليل الشبكة** "
+                        "وارفع ملفاً من نفس الداتاست.")
+
+                else:
+                    progress.progress(0)
+                    st.error(train_results["message"])
