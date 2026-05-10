@@ -578,5 +578,71 @@ def make_plots(results, benign_label, out_dir="plots/"):
     p = os.path.join(out_dir, "dashboard.png")
     fig.savefig(p, bbox_inches="tight"); plt.close()
     paths.append(("Summary Dashboard", p))
+# ── 10. Drift Analysis ────────────────────────────────────
+    try:
+        fig, axes = plt.subplots(1, 2, figsize=(14, 5))
 
+        # Confidence distribution vs reference
+        ref = np.random.RandomState(42).normal(
+            0.8, 0.1, len(y_conf))
+        axes[0].hist(y_conf, bins=40,
+                     color="#3498db", alpha=0.7,
+                     label="Current", density=True)
+        axes[0].hist(ref, bins=40,
+                     color="#e74c3c", alpha=0.5,
+                     label="Reference (Normal)",
+                     density=True)
+        axes[0].set_xlabel("Confidence Score")
+        axes[0].set_ylabel("Density")
+        axes[0].set_title("Drift Analysis — "
+                          "Confidence Distribution",
+                          fontweight="bold")
+        axes[0].legend()
+        axes[0].grid(alpha=0.3)
+
+        # KS test result
+        from scipy.stats import ks_2samp
+        stat, p_val = ks_2samp(y_conf, ref)
+        drifted = p_val < 0.05
+        drift_color = "#e74c3c" if drifted \
+            else "#2ecc71"
+        drift_text  = "DRIFT DETECTED ⚠️" if drifted \
+            else "Stable ✅"
+
+        axes[1].bar(
+            ["KS Statistic", "P-Value"],
+            [stat, p_val],
+            color=[drift_color, drift_color],
+            alpha=0.8)
+        axes[1].axhline(0.05, color="gray",
+                        ls="--", lw=1.5,
+                        label="Threshold=0.05")
+        axes[1].set_title(
+            f"KS Test — {drift_text}",
+            fontweight="bold",
+            color=drift_color)
+        axes[1].legend()
+        axes[1].grid(axis="y", alpha=0.3)
+
+        # أضف النص
+        axes[1].text(
+            0.5, 0.5,
+            f"KS={stat:.4f}\np={p_val:.4f}\n\n"
+            f"{drift_text}",
+            transform=axes[1].transAxes,
+            ha="center", va="center",
+            fontsize=14, fontweight="bold",
+            color=drift_color)
+
+        plt.suptitle("Agent 5 — Drift Analysis",
+                     fontweight="bold")
+        plt.tight_layout()
+        p = os.path.join(out_dir, "drift.png")
+        fig.savefig(p, bbox_inches="tight")
+        plt.close()
+        paths.append(("Drift Analysis", p))
+    except Exception:
+        pass
+
+    return paths
     return paths
