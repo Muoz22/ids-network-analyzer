@@ -70,7 +70,7 @@ def auto_exclude(df, label_col, benign_label):
     if obj_cols:
         df = df.drop(columns=obj_cols)
 
-    excl = [label_col]
+    excl    = [label_col]
     removed = {}
 
     if label_col in df.columns:
@@ -248,15 +248,15 @@ def make_plots(results, benign_label, out_dir="plots/"):
     os.makedirs(out_dir, exist_ok=True)
     paths = []
 
-    y_pred  = results["y_pred"]
-    y_conf  = results["y_conf"]
-    y_unk   = results["y_unknown"]
-    total   = results["n_samples"]
-    benign  = results["n_benign"]
-    atks    = results["n_attacks"]
-    unk     = results["n_unknown"]
-    thr     = results.get("ft_unk_thr", 0.60)
-    m       = results["metrics"]
+    y_pred = results["y_pred"]
+    y_conf = results["y_conf"]
+    y_unk  = results["y_unknown"]
+    total  = results["n_samples"]
+    benign = results["n_benign"]
+    atks   = results["n_attacks"]
+    unk    = results["n_unknown"]
+    thr    = results.get("ft_unk_thr", 0.60)
+    m      = results["metrics"]
 
     plt.rcParams.update({
         "figure.dpi": 120, "font.size": 11,
@@ -299,7 +299,7 @@ def make_plots(results, benign_label, out_dir="plots/"):
         fig.savefig(p, bbox_inches="tight"); plt.close()
         paths.append(("Attack Types", p))
 
-    # ── 3. Confidence Timeline + Distribution ─────────────────
+    # ── 3. Confidence ─────────────────────────────────────────
     fig, axes = plt.subplots(1, 2, figsize=(14, 5))
     n = min(3000, len(y_conf))
     c = ["#2ecc71" if p==benign_label
@@ -342,8 +342,7 @@ def make_plots(results, benign_label, out_dir="plots/"):
             cm = confusion_matrix(
                 y_true, y_pred, labels=present)
             sz = max(7, len(present))
-            fig, ax = plt.subplots(
-                figsize=(sz+1, sz))
+            fig, ax = plt.subplots(figsize=(sz+1, sz))
             sns.heatmap(
                 cm, annot=True, fmt="d",
                 cmap="Blues",
@@ -366,9 +365,8 @@ def make_plots(results, benign_label, out_dir="plots/"):
     # ── 5. Per-Class F1 ───────────────────────────────────────
     if "cm_true" in m:
         try:
-            y_true  = m["cm_true"]
-            labels  = sorted(
-                set(y_true)|set(y_pred))
+            y_true = m["cm_true"]
+            labels = sorted(set(y_true)|set(y_pred))
             f1s = f1_score(
                 y_true, y_pred,
                 labels=labels, average=None,
@@ -400,31 +398,34 @@ def make_plots(results, benign_label, out_dir="plots/"):
             pass
 
     # ── 6. Severity Distribution ──────────────────────────────
-    fig, ax = plt.subplots(figsize=(8, 6))
-    high_sev = ["ddos","dos","ransomware",
-                "backdoor","mitm","DDoS","DoS",
-                "Ransomware","Backdoor","MITM"]
-    n_high = sum(1 for p in y_pred
-                 if any(h in p for h in high_sev)
-                 and p != benign_label)
-    n_med  = atks - n_high
-    ax.pie(
-        [max(benign,1), max(n_high,1),
-         max(n_med,1)],
-        labels=["None","High","Medium"],
-        colors=["#2ecc71","#e74c3c","#f39c12"],
-        autopct="%1.1f%%", startangle=140,
-        shadow=True)
-    ax.set_title("Severity Distribution",
-                 fontweight="bold")
-    plt.tight_layout()
-    p = os.path.join(out_dir, "severity.png")
-    fig.savefig(p, bbox_inches="tight"); plt.close()
-    paths.append(("Severity Distribution", p))
-
-    # ── 7. Feature Importance (SHAP-like from probs) ──────────
     try:
-        class_names = list(set(y_pred))[:10]
+        fig, ax = plt.subplots(figsize=(8, 6))
+        high_sev = ["ddos","dos","ransomware",
+                    "backdoor","mitm","DDoS","DoS",
+                    "Ransomware","Backdoor","MITM"]
+        n_high = sum(1 for p in y_pred
+                     if any(h in p for h in high_sev)
+                     and p != benign_label)
+        n_med  = atks - n_high
+        ax.pie(
+            [max(benign,1), max(n_high,1),
+             max(n_med,1)],
+            labels=["None","High","Medium"],
+            colors=["#2ecc71","#e74c3c","#f39c12"],
+            autopct="%1.1f%%", startangle=140,
+            shadow=True)
+        ax.set_title("Severity Distribution",
+                     fontweight="bold")
+        plt.tight_layout()
+        p = os.path.join(out_dir, "severity.png")
+        fig.savefig(p, bbox_inches="tight")
+        plt.close()
+        paths.append(("Severity Distribution", p))
+    except Exception:
+        pass
+
+    # ── 7. Class Distribution ─────────────────────────────────
+    try:
         class_counts = Counter(y_pred)
         top_classes  = [x[0] for x in
                         class_counts.most_common(10)]
@@ -442,8 +443,7 @@ def make_plots(results, benign_label, out_dir="plots/"):
             [c[:15] for c in top_classes],
             rotation=45, ha="right", fontsize=9)
         ax.set_ylabel("Count")
-        ax.set_title("Prediction Distribution"
-                     " by Class",
+        ax.set_title("Prediction Distribution by Class",
                      fontweight="bold")
         ax.grid(axis="y", alpha=0.3)
         plt.tight_layout()
@@ -454,7 +454,7 @@ def make_plots(results, benign_label, out_dir="plots/"):
     except Exception:
         pass
 
-    # ── 8. ROC Curve (Binary) ─────────────────────────────────
+    # ── 8. ROC & PR Curves ────────────────────────────────────
     if "y_true" in m:
         try:
             y_true   = m["y_true"]
@@ -468,8 +468,8 @@ def make_plots(results, benign_label, out_dir="plots/"):
 
             fig, axes = plt.subplots(1, 2,
                                      figsize=(14, 5))
-            axes[0].plot(fpr, tpr,
-                         color="#3498db", lw=2,
+            axes[0].plot(fpr, tpr, color="#3498db",
+                         lw=2,
                          label=f"ROC (AUC={roc_auc:.3f})")
             axes[0].plot([0,1],[0,1],"k--", lw=1)
             axes[0].set_xlabel("False Positive Rate")
@@ -482,8 +482,8 @@ def make_plots(results, benign_label, out_dir="plots/"):
             prec, rec, _ = precision_recall_curve(
                 y_bin, y_scores)
             pr_auc = auc(rec, prec)
-            axes[1].plot(rec, prec,
-                         color="#e74c3c", lw=2,
+            axes[1].plot(rec, prec, color="#e74c3c",
+                         lw=2,
                          label=f"PR (AUC={pr_auc:.3f})")
             axes[1].set_xlabel("Recall")
             axes[1].set_ylabel("Precision")
@@ -504,45 +504,41 @@ def make_plots(results, benign_label, out_dir="plots/"):
             pass
 
     # ── 9. Summary Dashboard ──────────────────────────────────
-    fig = plt.figure(figsize=(18, 10))
-    gs  = gridspec.GridSpec(2, 3, figure=fig,
-                            hspace=0.4, wspace=0.35)
+    try:
+        fig = plt.figure(figsize=(18, 10))
+        gs  = gridspec.GridSpec(2, 3, figure=fig,
+                                hspace=0.4, wspace=0.35)
 
-    # Decision pie
-    ax1 = fig.add_subplot(gs[0, 0])
-    ax1.pie(
-        [max(s,1) for s in [benign, atks, unk]],
-        labels=["Benign","Attack","Unknown"],
-        colors=["#2ecc71","#e74c3c","#f39c12"],
-        autopct="%1.1f%%", startangle=140)
-    ax1.set_title("Decisions", fontweight="bold")
+        ax1 = fig.add_subplot(gs[0, 0])
+        ax1.pie(
+            [max(s,1) for s in [benign, atks, unk]],
+            labels=["Benign","Attack","Unknown"],
+            colors=["#2ecc71","#e74c3c","#f39c12"],
+            autopct="%1.1f%%", startangle=140)
+        ax1.set_title("Decisions", fontweight="bold")
 
-    # Confidence dist
-    ax2 = fig.add_subplot(gs[0, 1])
-    ax2.hist(y_conf, bins=50,
-             color="#9b59b6", alpha=0.7,
-             density=True)
-    ax2.axvline(thr, color="red", ls="--", lw=1.5)
-    ax2.set_title("Confidence Dist",
-                  fontweight="bold")
-    ax2.set_xlabel("Confidence")
-    ax2.grid(alpha=0.3)
-
-    # Attack counts
-    ax3 = fig.add_subplot(gs[0, 2])
-    if results["atk_counts"]:
-        top5 = results["atk_counts"].most_common(5)
-        nms5 = [x[0][:12] for x in top5]
-        vls5 = [x[1] for x in top5]
-        ax3.barh(nms5, vls5,
-                 color="#e74c3c", alpha=0.85)
-        ax3.set_title("Top 5 Attacks",
+        ax2 = fig.add_subplot(gs[0, 1])
+        ax2.hist(y_conf, bins=50,
+                 color="#9b59b6", alpha=0.7,
+                 density=True)
+        ax2.axvline(thr, color="red", ls="--", lw=1.5)
+        ax2.set_title("Confidence Dist",
                       fontweight="bold")
-        ax3.grid(axis="x", alpha=0.3)
+        ax2.set_xlabel("Confidence")
+        ax2.grid(alpha=0.3)
 
-    # Per-class F1
-    if "cm_true" in m:
-        try:
+        ax3 = fig.add_subplot(gs[0, 2])
+        if results["atk_counts"]:
+            top5 = results["atk_counts"].most_common(5)
+            nms5 = [x[0][:12] for x in top5]
+            vls5 = [x[1] for x in top5]
+            ax3.barh(nms5, vls5,
+                     color="#e74c3c", alpha=0.85)
+            ax3.set_title("Top 5 Attacks",
+                          fontweight="bold")
+            ax3.grid(axis="x", alpha=0.3)
+
+        if "cm_true" in m:
             ax4  = fig.add_subplot(gs[1, :])
             y_tr = m["cm_true"]
             lbs  = sorted(set(y_tr)|set(y_pred))
@@ -557,32 +553,34 @@ def make_plots(results, benign_label, out_dir="plots/"):
             ax4.set_xticks(range(len(lbs)))
             ax4.set_xticklabels(
                 [l[:12] for l in lbs],
-                rotation=45, ha="right",
-                fontsize=9)
+                rotation=45, ha="right", fontsize=9)
             ax4.axhline(0.8, color="gray",
                         ls="--", lw=1.5)
             ax4.set_ylabel("F1 Score")
             ax4.set_title("Per-Class F1",
                           fontweight="bold")
             ax4.grid(axis="y", alpha=0.3)
-        except Exception:
-            pass
 
-    acc_str = (f"Acc={m['accuracy']*100:.1f}%  "
-               f"W-F1={m['weighted_f1']*100:.1f}%  "
-               f"Macro-F1={m['macro_f1']*100:.1f}%"
-               if "accuracy" in m else "")
-    plt.suptitle(
-        f"Summary Dashboard  {acc_str}",
-        fontweight="bold", fontsize=13)
-    p = os.path.join(out_dir, "dashboard.png")
-    fig.savefig(p, bbox_inches="tight"); plt.close()
-    paths.append(("Summary Dashboard", p))
-# ── 10. Drift Analysis ────────────────────────────────────
+        acc_str = (
+            f"Acc={m['accuracy']*100:.1f}%  "
+            f"W-F1={m['weighted_f1']*100:.1f}%  "
+            f"Macro-F1={m['macro_f1']*100:.1f}%"
+            if "accuracy" in m else "")
+        plt.suptitle(
+            f"Summary Dashboard  {acc_str}",
+            fontweight="bold", fontsize=13)
+        p = os.path.join(out_dir, "dashboard.png")
+        fig.savefig(p, bbox_inches="tight")
+        plt.close()
+        paths.append(("Summary Dashboard", p))
+    except Exception:
+        pass
+
+    # ── 10. Drift Analysis ────────────────────────────────────
     try:
+        from scipy.stats import ks_2samp
         fig, axes = plt.subplots(1, 2, figsize=(14, 5))
 
-        # Confidence distribution vs reference
         ref = np.random.RandomState(42).normal(
             0.8, 0.1, len(y_conf))
         axes[0].hist(y_conf, bins=40,
@@ -594,16 +592,14 @@ def make_plots(results, benign_label, out_dir="plots/"):
                      density=True)
         axes[0].set_xlabel("Confidence Score")
         axes[0].set_ylabel("Density")
-        axes[0].set_title("Drift Analysis — "
-                          "Confidence Distribution",
-                          fontweight="bold")
+        axes[0].set_title(
+            "Drift Analysis — Confidence Distribution",
+            fontweight="bold")
         axes[0].legend()
         axes[0].grid(alpha=0.3)
 
-        # KS test result
-        from scipy.stats import ks_2samp
         stat, p_val = ks_2samp(y_conf, ref)
-        drifted = p_val < 0.05
+        drifted     = p_val < 0.05
         drift_color = "#e74c3c" if drifted \
             else "#2ecc71"
         drift_text  = "DRIFT DETECTED ⚠️" if drifted \
@@ -619,12 +615,9 @@ def make_plots(results, benign_label, out_dir="plots/"):
                         label="Threshold=0.05")
         axes[1].set_title(
             f"KS Test — {drift_text}",
-            fontweight="bold",
-            color=drift_color)
+            fontweight="bold", color=drift_color)
         axes[1].legend()
         axes[1].grid(axis="y", alpha=0.3)
-
-        # أضف النص
         axes[1].text(
             0.5, 0.5,
             f"KS={stat:.4f}\np={p_val:.4f}\n\n"
@@ -644,31 +637,32 @@ def make_plots(results, benign_label, out_dir="plots/"):
     except Exception:
         pass
 
-    # أضف هذه الدوال في نهاية inference.py
+    return paths
+
+
+# ================================================================
+# Custom Model Training (RandomForest — CPU friendly)
+# ================================================================
 
 def train_custom_model(df, label_col, benign_label,
                        max_rows=10000):
-    """
-    يدرّب نموذج XGBoost خفيف على الداتاست المرفوعة
-    يعمل على CPU في 30-60 ثانية
-    """
     from sklearn.preprocessing import (
         RobustScaler, LabelEncoder)
     from sklearn.model_selection import train_test_split
     from sklearn.ensemble import RandomForestClassifier
-    import xgboost as xgb
 
     results = {
-        "success"  : False,
-        "message"  : "",
-        "model"    : None,
-        "scaler"   : None,
-        "le"       : None,
-        "features" : None,
-        "classes"  : None,
-        "metrics"  : {},
-        "n_samples": 0,
-        "n_classes": 0,
+        "success"     : False,
+        "message"     : "",
+        "model"       : None,
+        "scaler"      : None,
+        "le"          : None,
+        "features"    : None,
+        "classes"     : None,
+        "metrics"     : {},
+        "n_samples"   : 0,
+        "n_classes"   : 0,
+        "removed_cols": {},
     }
 
     try:
@@ -680,9 +674,11 @@ def train_custom_model(df, label_col, benign_label,
         # ── Auto Exclude ──────────────────────────────────────
         df_clean, avail, removed = auto_exclude(
             df, label_col, benign_label)
+        results["removed_cols"] = removed
 
         if len(avail) == 0:
-            results["message"] = "❌ لا توجد features صالحة"
+            results["message"] = \
+                "❌ لا توجد features صالحة بعد الفلترة"
             return results
 
         # ── Encode Labels ─────────────────────────────────────
@@ -691,67 +687,59 @@ def train_custom_model(df, label_col, benign_label,
         results["classes"]   = list(le.classes_)
         results["n_classes"] = len(le.classes_)
 
-        # ── Features ──────────────────────────────────────────
-        X = df_clean[avail].values.astype(np.float32)
-        results["features"] = avail
-
-        # ── Scale ─────────────────────────────────────────────
+        # ── Features + Scale ──────────────────────────────────
+        X      = df_clean[avail].values.astype(np.float32)
         scaler = RobustScaler()
         X_sc   = scaler.fit_transform(X)
+        results["features"] = avail
 
         # ── Split ─────────────────────────────────────────────
+        stratify = y if len(np.unique(y)) > 1 else None
         X_tr, X_te, y_tr, y_te = train_test_split(
             X_sc, y,
             test_size=0.2,
             random_state=42,
-            stratify=y if len(np.unique(y)) > 1 else None)
+            stratify=stratify)
 
-        # ── Train XGBoost ─────────────────────────────────────
-        n_cls = len(le.classes_)
-        model = xgb.XGBClassifier(
-            n_estimators   = 100,
-            max_depth      = 6,
-            learning_rate  = 0.1,
-            subsample      = 0.8,
-            random_state   = 42,
-            n_jobs         = -1,
-            eval_metric    = "mlogloss",
-            verbosity      = 0,
-            use_label_encoder = False,
+        # ── Train RandomForest ────────────────────────────────
+        model = RandomForestClassifier(
+            n_estimators = 100,
+            max_depth    = 15,
+            random_state = 42,
+            n_jobs       = -1,
+            class_weight = "balanced",
         )
         model.fit(X_tr, y_tr)
 
         # ── Evaluate ──────────────────────────────────────────
-        y_pred = model.predict(X_te)
-        acc = accuracy_score(y_te, y_pred)
-        wf1 = f1_score(y_te, y_pred,
-                       average="weighted",
-                       zero_division=0)
-        mf1 = f1_score(y_te, y_pred,
-                       average="macro",
-                       zero_division=0)
-
+        y_pred       = model.predict(X_te)
         y_pred_names = le.inverse_transform(y_pred)
         y_true_names = le.inverse_transform(y_te)
 
+        acc = accuracy_score(y_true_names, y_pred_names)
+        wf1 = f1_score(y_true_names, y_pred_names,
+                       average="weighted",
+                       zero_division=0)
+        mf1 = f1_score(y_true_names, y_pred_names,
+                       average="macro",
+                       zero_division=0)
         report = classification_report(
             y_true_names, y_pred_names,
             zero_division=0)
 
         results.update({
-            "success" : True,
-            "message" : f"✅ تم التدريب بنجاح! "
-                        f"Accuracy={acc*100:.2f}%",
-            "model"   : model,
-            "scaler"  : scaler,
-            "le"      : le,
-            "metrics" : {
+            "success": True,
+            "message": f"✅ تم التدريب! "
+                       f"Accuracy={acc*100:.2f}%",
+            "model"  : model,
+            "scaler" : scaler,
+            "le"     : le,
+            "metrics": {
                 "accuracy"   : acc,
                 "weighted_f1": wf1,
                 "macro_f1"   : mf1,
                 "report"     : report,
             },
-            "removed_cols": removed,
         })
 
     except Exception as e:
@@ -760,17 +748,17 @@ def train_custom_model(df, label_col, benign_label,
     return results
 
 
+# ================================================================
+# Inference with Custom Model (RandomForest)
+# ================================================================
+
 def run_inference_custom(df, custom, label_col,
                          benign_label, ft_unk_thr=0.60):
-    """
-    يشغّل inference باستخدام النموذج المخصص (XGBoost)
-    """
     t0 = datetime.now()
 
     df_clean, avail, removed = auto_exclude(
         df, label_col, benign_label)
 
-    # align features
     train_feats = custom["features"]
     X = np.zeros(
         (len(df_clean), len(train_feats)),
@@ -844,4 +832,3 @@ def run_inference_custom(df, custom, label_col,
         "X_final"      : X_sc,
         "ft_unk_thr"   : ft_unk_thr,
     }
-    return paths
