@@ -734,16 +734,59 @@ with tab5:
                          use_container_width=True)
 
         st.markdown("### ⚙️ إعدادات التدريب")
+
+        # ── Auto-detect label col ──────────────────────────
+        def detect_label_col(df):
+            candidates = [
+                "label","type","attack","class",
+                "category","target","Label","Type",
+                "Attack","Class","Category","Target",
+                "attack_type","attack_cat","Label_cat",
+                "traffic_type","class_label"]
+            for c in candidates:
+                if c in df.columns:
+                    return c
+            return None
+
+        def detect_benign_label(df, label_col):
+            if label_col not in df.columns:
+                return "normal"
+            candidates = [
+                "normal","Normal","BENIGN","benign",
+                "Benign","BenignTraffic","legitimate",
+                "Legitimate","background","Background",
+                "safe","Safe","0","none","None"]
+            vals = df[label_col].unique().tolist()
+            for c in candidates:
+                if c in vals:
+                    return c
+            # إذا لم نجد — أرجع الأكثر تكراراً
+            return df[label_col].value_counts().index[0]
+
+        detected_lc = detect_label_col(df_train)
+        detected_bl = detect_benign_label(
+            df_train, detected_lc or label_col)
+
+        if detected_lc:
+            st.success(
+                f"✅ اكتشفنا تلقائياً — "
+                f"Label: **'{detected_lc}'**  |  "
+                f"Benign: **'{detected_bl}'**")
+        else:
+            st.warning(
+                "⚠️ لم نتمكن من اكتشاف عمود الـ label "
+                "تلقائياً — أدخله يدوياً")
+
         tc1, tc2, tc3 = st.columns(3)
         with tc1:
             train_label = st.text_input(
                 "عمود الـ Label",
-                value=label_col,
+                value=detected_lc or label_col,
                 key="train_label_col")
         with tc2:
             train_benign = st.text_input(
                 "الكلاس الطبيعي",
-                value=benign_label,
+                value=detected_bl,
                 key="train_benign_label")
         with tc3:
             max_rows = st.number_input(
