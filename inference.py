@@ -644,5 +644,204 @@ def make_plots(results, benign_label, out_dir="plots/"):
     except Exception:
         pass
 
-    return paths
+    # أضف هذه الدوال في نهاية inference.py
+
+def train_custom_model(df, label_col, benign_label,
+                       max_rows=10000):
+    """
+    يدرّب نموذج XGBoost خفيف على الداتاست المرفوعة
+    يعمل على CPU في 30-60 ثانية
+    """
+    from sklearn.preprocessing import (
+        RobustScaler, LabelEncoder)
+    from sklearn.model_selection import train_test_split
+    from sklearn.ensemble import RandomForestClassifier
+    import xgboost as xgb
+
+    results = {
+        "success"  : False,
+        "message"  : "",
+        "model"    : None,
+        "scaler"   : None,
+        "le"       : None,
+        "features" : None,
+        "classes"  : None,
+        "metrics"  : {},
+        "n_samples": 0,
+        "n_classes": 0,
+    }
+
+    try:
+        # ── Sample ────────────────────────────────────────────
+        if len(df) > max_rows:
+            df = df.sample(max_rows, random_state=42)
+        results["n_samples"] = len(df)
+
+        # ── Auto Exclude ──────────────────────────────────────
+        df_clean, avail, removed = auto_exclude(
+            df, label_col, benign_label)
+
+        if len(avail) == 0:
+            results["message"] = "❌ لا توجد features صالحة"
+            return results
+
+        # ── Encode Labels ─────────────────────────────────────
+        le = LabelEncoder()
+        y  = le.fit_transform(df[label_col].values)
+        results["classes"]   = list(le.classes_)
+        results["n_classes"] = len(le.classes_)
+
+        # ── Features ──────────────────────────────────────────
+        X = df_clean[avail].values.astype(np.float32)
+        results["features"] = avail
+
+        # ── Scale ─────────────────────────────────────────────
+        scaler = RobustScaler()
+        X_sc   = scaler.fit_transform(X)
+
+        # ── Split ─────────────────────────────────────────────
+        X_tr, X_te, y_tr, y_te = train_test_split(
+            X_sc, y,
+            test_size=0.2,
+            random_state=42,
+            stratify=y if len(np.unique(y)) > 1 else None)
+
+        # ── Train XGBoost ─────────────────────────────────────
+        n_cls = len(le.classes_)
+        model = xgb.XGBClassifier(
+            n_estimators   = 100,
+            max_depth      = 6,
+            learning_rate  = 0.1,
+            subsample      = 0.8,
+            random_state   = 42,
+            n_jobs         = -1,
+            eval_metric    = "mlogloss",
+            verbosity      = 0,
+            use_label_encoder = False,
+        )
+        model.fit(X_tr, y_tr)
+
+        # ── Evaluate ──────────────────────────────────────────
+        y_pred = model.predict(X_te)
+        acc = accuracy_score(y_te, y_pred)
+        wf1 = f1_score(y_te, y_pred,
+                       average="weighted",
+                       zero_division=0)
+        mf1 = f1_score(y_te, y_pred,
+                       average="macro",
+                       zero_division=0)
+
+        y_pred_names = le.inverse_transform(y_pred)
+        y_true_names = le.inverse_transform(y_te)
+
+        report = classification_report(
+            y_true_names, y_pred_names,
+            zero_division=0)
+
+        results.update({
+            "success" : True,
+            "message" : f"✅ تم التدريب بنجاح! "
+                        f"Accuracy={acc*100:.2f}%",
+            "model"   : model,
+            "scaler"  : scaler,
+            "le"      : le,
+            "metrics" : {
+                "accuracy"   : acc,
+                "weighted_f1": wf1,
+                "macro_f1"   : mf1,
+                "report"     : report,
+            },
+            "removed_cols": removed,
+        })
+
+    except Exception as e:
+        results["message"] = f"❌ خطأ: {str(e)}"
+
+    return results
+
+
+def run_inference_custom(df, custom, label_col,
+                         benign_label, ft_unk_thr=0.60):
+    """
+    يشغّل inference باستخدام النموذج المخصص (XGBoost)
+    """
+    t0 = datetime.now()
+
+    df_clean, avail, removed = auto_exclude(
+        df, label_col, benign_label)
+
+    # align features
+    train_feats = custom["features"]
+    X = np.zeros(
+        (len(df_clean), len(train_feats)),
+        dtype=np.float32)
+    matched = []
+    missing = []
+    for i, feat in enumerate(train_feats):
+        if feat in avail and feat in df_clean.columns:
+            X[:, i] = df_clean[feat].values.astype(
+                np.float32)
+            matched.append(feat)
+        else:
+            missing.append(feat)
+
+    X_sc     = custom["scaler"].transform(X)
+    y_pred_e = custom["model"].predict(X_sc)
+    y_probs  = custom["model"].predict_proba(X_sc)
+    y_conf   = y_probs.max(axis=1)
+    y_unk    = y_conf < ft_unk_thr
+
+    le           = custom["le"]
+    y_pred_names = list(le.inverse_transform(y_pred_e))
+
+    total   = len(y_pred_names)
+    benign  = sum(1 for p in y_pred_names
+                  if p == benign_label)
+    unknown = int(y_unk.sum())
+    attacks = total - benign - unknown
+
+    atk_counts = Counter(
+        p for p, u in zip(y_pred_names, y_unk)
+        if p != benign_label and not u)
+
+    metrics = {}
+    if label_col in df.columns:
+        y_true = df[label_col].values[:total]
+        try:
+            metrics["accuracy"]    = accuracy_score(
+                y_true, y_pred_names)
+            metrics["weighted_f1"] = f1_score(
+                y_true, y_pred_names,
+                average="weighted", zero_division=0)
+            metrics["macro_f1"]    = f1_score(
+                y_true, y_pred_names,
+                average="macro", zero_division=0)
+            metrics["report"]      = classification_report(
+                y_true, y_pred_names,
+                zero_division=0)
+            metrics["cm_true"]     = y_true
+            metrics["y_true"]      = y_true
+        except Exception as e:
+            metrics["error"] = str(e)
+
+    elapsed = (datetime.now() - t0).seconds
+
+    return {
+        "y_pred"       : y_pred_names,
+        "y_probs"      : y_probs,
+        "y_conf"       : y_conf,
+        "y_unknown"    : y_unk,
+        "n_samples"    : total,
+        "n_benign"     : benign,
+        "n_attacks"    : attacks,
+        "n_unknown"    : unknown,
+        "atk_counts"   : atk_counts,
+        "metrics"      : metrics,
+        "removed_cols" : removed,
+        "matched_feats": matched,
+        "missing_feats": missing,
+        "elapsed_sec"  : elapsed,
+        "X_final"      : X_sc,
+        "ft_unk_thr"   : ft_unk_thr,
+    }
     return paths
