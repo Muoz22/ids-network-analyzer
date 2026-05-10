@@ -48,6 +48,34 @@ st.markdown("""
 """, unsafe_allow_html=True)
 
 
+# ── Helper Functions ──────────────────────────────────────────
+def detect_label_col(df):
+    candidates = [
+        "label","type","attack","class",
+        "category","target","Label","Type",
+        "Attack","Class","Category","Target",
+        "attack_type","attack_cat","Label_cat",
+        "traffic_type","class_label"]
+    for c in candidates:
+        if c in df.columns:
+            return c
+    return None
+
+def detect_benign_label(df, lc):
+    if lc not in df.columns:
+        return "normal"
+    candidates = [
+        "normal","Normal","BENIGN","benign",
+        "Benign","BenignTraffic","legitimate",
+        "Legitimate","background","Background",
+        "safe","Safe","0","none","None"]
+    vals = df[lc].unique().tolist()
+    for c in candidates:
+        if c in vals:
+            return c
+    return df[lc].value_counts().index[0]
+
+
 @st.cache_resource
 def load_models_cached(version="v3"):
     try:
@@ -79,13 +107,11 @@ with st.sidebar:
     st.markdown("---")
     st.markdown("### 📊 النموذج")
 
-    # عرض معلومات النموذج النشط
     if "custom_meta" in st.session_state:
         st.warning("🔧 النموذج المخصص نشط")
         cm = st.session_state["custom_meta"]
         st.write(f"**Classes:** {cm['n_classes']}")
-        st.write(f"**Features:** "
-                 f"{len(cm['features'])}")
+        st.write(f"**Features:** {len(cm['features'])}")
         acc = cm["metrics"].get("accuracy", 0)*100
         st.write(f"**Accuracy:** {acc:.2f}%")
     elif models_global and "meta" in models_global:
@@ -162,13 +188,40 @@ with tab1:
             st.write(f"**الأعمدة:** "
                      f"{df.columns.tolist()}")
 
-        if label_col in df.columns:
+        # ── Auto-detect label ──────────────────────────────
+        auto_lc = detect_label_col(df)
+        auto_bl = detect_benign_label(
+            df, auto_lc or label_col)
+
+        if auto_lc and auto_lc != label_col:
+            st.info(
+                f"🔍 اكتشفنا تلقائياً — "
+                f"Label: **'{auto_lc}'**  |  "
+                f"Benign: **'{auto_bl}'**")
+            use_lc = auto_lc
+            use_bl = auto_bl
+        elif label_col in df.columns:
             st.info(
                 f"✅ عمود '{label_col}' موجود — "
                 f"{df[label_col].value_counts().head(5).to_dict()}")
+            use_lc = label_col
+            use_bl = benign_label
         else:
             st.warning(
-                f"⚠️ عمود '{label_col}' غير موجود")
+                f"⚠️ لم يُعثر على عمود label — "
+                f"سيعمل بدون تقرير الدقة")
+            use_lc = label_col
+            use_bl = benign_label
+
+        # ── إذا كان النموذج المخصص نشطاً ─────────────────
+        if "custom_meta" in st.session_state:
+            cm_meta = st.session_state["custom_meta"]
+            use_lc  = cm_meta.get("label_col", use_lc)
+            use_bl  = cm_meta.get("benign_label", use_bl)
+            st.success(
+                f"🔧 النموذج المخصص نشط — "
+                f"Label: '{use_lc}'  |  "
+                f"Benign: '{use_bl}'")
 
         if st.button("🚀 ابدأ التحليل",
                      type="primary",
@@ -195,8 +248,8 @@ with tab1:
                     results = run_inference_custom(
                         df,
                         st.session_state["custom_model"],
-                        label_col,
-                        benign_label,
+                        use_lc,
+                        use_bl,
                         ft_unk_thr=threshold)
                     st.sidebar.success(
                         "🔧 يستخدم النموذج المخصص")
@@ -207,8 +260,9 @@ with tab1:
                         st.error(f"❌ {err}")
                         st.stop()
                     results = run_inference(
-                        df, models, label_col,
-                        benign_label,
+                        df, models,
+                        use_lc,
+                        use_bl,
                         ft_unk_thr=threshold)
                     st.sidebar.info(
                         "🔵 يستخدم النموذج الأصلي (TON-IoT)")
@@ -218,7 +272,7 @@ with tab1:
 
                 with tempfile.TemporaryDirectory() as tmp:
                     plot_paths = make_plots(
-                        results, benign_label,
+                        results, use_bl,
                         out_dir=tmp)
                     plot_bytes = []
                     for title, path in plot_paths:
@@ -321,6 +375,8 @@ with tab1:
                 with st.expander("🔍 تفاصيل المعالجة"):
                     st.write(f"**وقت التنفيذ:** "
                              f"{results['elapsed_sec']}s")
+                    st.write(f"**Label col:** {use_lc}")
+                    st.write(f"**Benign label:** {use_bl}")
                     st.write(f"**Features مطابقة:** "
                              f"{results['matched_feats']}")
                     if results["missing_feats"]:
@@ -594,10 +650,10 @@ Agent 6: ALLOW / BLOCK / QUARANTINE
             "أي داتاست","SMOTE صحيح",
             "Boruta+SHAP","Behavioral AE",
             "Persistent Memory","Train Custom",
-            "Accuracy"],
-        "v1": ["❌","❌","✅","❌","✅","❌","97.7%"],
-        "v2": ["✅","❌","❌","✅","❌","❌","68%"],
-        "v3": ["✅","✅","✅","✅","✅","✅","93-98%"],
+            "Auto Label Detection","Accuracy"],
+        "v1": ["❌","❌","✅","❌","✅","❌","❌","97.7%"],
+        "v2": ["✅","❌","❌","✅","❌","❌","❌","68%"],
+        "v3": ["✅","✅","✅","✅","✅","✅","✅","93-98%"],
     })
     st.dataframe(comparison, use_container_width=True,
                  hide_index=True)
@@ -632,7 +688,7 @@ with tab4:
         - **SMOTE-ENN** — Class Balancing (Train only)
         - **Autoencoder + IForest** — Anomaly Detection
         - **ONNX Runtime** — Fast Inference
-        - **XGBoost** — Custom Model Training
+        - **RandomForest** — Custom Model Training
         - **Persistent Memory** — تحسين مستمر
 
         ### 📞 التواصل
@@ -677,14 +733,14 @@ with tab5:
     st.markdown("## 🔧 Train Custom Model")
     st.info(
         "ارفع داتاست جديدة وسيتدرب النظام عليها "
-        "تلقائياً في 30-60 ثانية باستخدام XGBoost. "
+        "تلقائياً في 30-60 ثانية باستخدام RandomForest. "
         "النموذج الأصلي لن يتأثر.")
 
     if "custom_model" in st.session_state:
         cm = st.session_state["custom_meta"]
         st.success(
             f"✅ نموذج مخصص محمّل — "
-            f"Classes: {cm['classes']}  "
+            f"Classes: {cm['n_classes']}  "
             f"Accuracy: "
             f"{cm['metrics'].get('accuracy',0)*100:.1f}%")
         if st.button(
@@ -734,34 +790,6 @@ with tab5:
                          use_container_width=True)
 
         st.markdown("### ⚙️ إعدادات التدريب")
-
-        # ── Auto-detect label col ──────────────────────────
-        def detect_label_col(df):
-            candidates = [
-                "label","type","attack","class",
-                "category","target","Label","Type",
-                "Attack","Class","Category","Target",
-                "attack_type","attack_cat","Label_cat",
-                "traffic_type","class_label"]
-            for c in candidates:
-                if c in df.columns:
-                    return c
-            return None
-
-        def detect_benign_label(df, label_col):
-            if label_col not in df.columns:
-                return "normal"
-            candidates = [
-                "normal","Normal","BENIGN","benign",
-                "Benign","BenignTraffic","legitimate",
-                "Legitimate","background","Background",
-                "safe","Safe","0","none","None"]
-            vals = df[label_col].unique().tolist()
-            for c in candidates:
-                if c in vals:
-                    return c
-            # إذا لم نجد — أرجع الأكثر تكراراً
-            return df[label_col].value_counts().index[0]
 
         detected_lc = detect_label_col(df_train)
         detected_bl = detect_benign_label(
@@ -844,14 +872,14 @@ with tab5:
                 progress.progress(10)
                 status.text("🔬 Feature Selection...")
                 progress.progress(30)
-                status.text("🤖 تدريب XGBoost...")
+                status.text("🤖 تدريب RandomForest...")
                 progress.progress(50)
 
                 train_results = train_custom_model(
                     df_train,
                     label_col    = train_label,
                     benign_label = train_benign,
-                    max_rows     = max_rows)
+                    max_rows     = int(max_rows))
 
                 progress.progress(90)
 
