@@ -1,0 +1,39 @@
+{
+  "feat_cols": [
+    "src_ip_bytes",
+    "dst_port",
+    "dst_ip_bytes",
+    "src_pkts",
+    "src_port",
+    "dst_bytes",
+    "duration",
+    "dst_pkts",
+    "dns_qclass",
+    "dns_qtype"
+  ],
+  "class_names": [
+    "backdoor",
+    "ddos",
+    "dos",
+    "injection",
+    "mitm",
+    "normal",
+    "password",
+    "ransomware",
+    "scanning",
+    "xss"
+  ],
+  "benign_label": "normal",
+  "label_col": "type",
+  "n_features": 10,
+  "n_classes": 10,
+  "ft_unk_thr": 0.6,
+  "trained_on": "/kaggle/input/datasets/muaadhalsoufi017/ton-iot1111111/Network_dataset_*.csv",
+  "trained_at": "2026-05-10T03:00:04.065112",
+  "accuracy": 0.9784301977231875,
+  "weighted_f1": 0.9792570124194122,
+  "macro_f1": 0.922911600040934,
+  "session": 3,
+  "scaler_features": 10,
+  "missing_in_raw": []
+}
