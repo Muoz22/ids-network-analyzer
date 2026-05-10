@@ -6,6 +6,7 @@ import streamlit as st
 import pandas as pd
 import numpy as np
 import os, tempfile, json
+import matplotlib.pyplot as plt
 from datetime import datetime
 
 st.set_page_config(
@@ -77,13 +78,25 @@ with st.sidebar:
 
     st.markdown("---")
     st.markdown("### 📊 النموذج")
-    if models_global and "meta" in models_global:
+
+    # عرض معلومات النموذج النشط
+    if "custom_meta" in st.session_state:
+        st.warning("🔧 النموذج المخصص نشط")
+        cm = st.session_state["custom_meta"]
+        st.write(f"**Classes:** {cm['n_classes']}")
+        st.write(f"**Features:** "
+                 f"{len(cm['features'])}")
+        acc = cm["metrics"].get("accuracy", 0)*100
+        st.write(f"**Accuracy:** {acc:.2f}%")
+    elif models_global and "meta" in models_global:
         meta = models_global["meta"]
-        st.success("✅ النموذج محمّل")
+        st.success("✅ النموذج الأصلي (TON-IoT)")
         st.write(f"**Accuracy:** "
                  f"{meta.get('accuracy',0)*100:.2f}%")
-        st.write(f"**Classes:** {meta.get('n_classes',0)}")
-        st.write(f"**Features:** {meta.get('n_features',0)}")
+        st.write(f"**Classes:** "
+                 f"{meta.get('n_classes',0)}")
+        st.write(f"**Features:** "
+                 f"{meta.get('n_features',0)}")
         with st.expander("🔍 التفاصيل"):
             st.write("**Class Names:**")
             for c in meta.get("class_names", []):
@@ -162,11 +175,6 @@ with tab1:
                      use_container_width=True,
                      key="btn_analyze"):
 
-            models, err = load_models_cached(version="v3")
-            if err:
-                st.error(f"❌ {err}")
-                st.stop()
-
             progress = st.progress(0)
             status   = st.empty()
 
@@ -174,28 +182,36 @@ with tab1:
                 status.text("⚙️ تنظيف البيانات...")
                 progress.progress(20)
 
-                from inference import run_inference, make_plots
+                from inference import (
+                    run_inference,
+                    run_inference_custom,
+                    make_plots)
 
                 status.text("🤖 تشغيل النماذج...")
                 progress.progress(50)
 
+                # ── اختيار النموذج ────────────────────────
                 if "custom_model" in st.session_state:
-    from inference import run_inference_custom
-    results = run_inference_custom(
-        df,
-        st.session_state["custom_model"],
-        label_col,
-        benign_label,
-        ft_unk_thr=threshold)
-    st.sidebar.success(
-        "🔧 يستخدم النموذج المخصص")
-else:
-    results = run_inference(
-        df, models, label_col,
-        benign_label,
-        ft_unk_thr=threshold)
-    st.sidebar.info(
-        "🔵 يستخدم النموذج الأصلي (TON-IoT)")
+                    results = run_inference_custom(
+                        df,
+                        st.session_state["custom_model"],
+                        label_col,
+                        benign_label,
+                        ft_unk_thr=threshold)
+                    st.sidebar.success(
+                        "🔧 يستخدم النموذج المخصص")
+                else:
+                    models, err = load_models_cached(
+                        version="v3")
+                    if err:
+                        st.error(f"❌ {err}")
+                        st.stop()
+                    results = run_inference(
+                        df, models, label_col,
+                        benign_label,
+                        ft_unk_thr=threshold)
+                    st.sidebar.info(
+                        "🔵 يستخدم النموذج الأصلي (TON-IoT)")
 
                 status.text("📊 إنتاج الرسوم...")
                 progress.progress(80)
@@ -204,7 +220,6 @@ else:
                     plot_paths = make_plots(
                         results, benign_label,
                         out_dir=tmp)
-                    # حفظ كـ bytes قبل حذف tmp
                     plot_bytes = []
                     for title, path in plot_paths:
                         try:
@@ -292,8 +307,9 @@ else:
                                 plot_bytes[i:i+2]):
                             with cols[j]:
                                 st.markdown(f"**{title}**")
-                                st.image(img,
-                                         use_column_width=True)
+                                st.image(
+                                    img,
+                                    use_column_width=True)
 
                 # ── تقرير ─────────────────────────────────
                 if "report" in m:
@@ -449,6 +465,25 @@ with tab2:
             st.image(conf_imgs[0][1],
                      use_column_width=True)
 
+        # ── Drift Analysis ─────────────────────────────────
+        st.markdown("---")
+        st.markdown("### 🌊 Drift Analysis")
+        drift_imgs = [(t,img) for t,img in plot_bytes
+                      if "Drift" in t]
+        if drift_imgs:
+            st.image(drift_imgs[0][1],
+                     use_column_width=True)
+
+        # ── Summary Dashboard ──────────────────────────────
+        st.markdown("---")
+        st.markdown("### 🗂️ Summary Dashboard")
+        dash_imgs = [(t,img) for t,img in plot_bytes
+                     if "Dashboard" in t or
+                     "Summary" in t]
+        if dash_imgs:
+            st.image(dash_imgs[0][1],
+                     use_column_width=True)
+
         # ── All Plots ──────────────────────────────────────
         st.markdown("---")
         st.markdown("### 🖼️ كل الرسوم البيانية")
@@ -558,10 +593,11 @@ Agent 6: ALLOW / BLOCK / QUARANTINE
         "الميزة": [
             "أي داتاست","SMOTE صحيح",
             "Boruta+SHAP","Behavioral AE",
-            "Persistent Memory","Accuracy"],
-        "v1": ["❌","❌","✅","❌","✅","97.7%"],
-        "v2": ["✅","❌","❌","✅","❌","68%"],
-        "v3": ["✅","✅","✅","✅","✅","93-98%"],
+            "Persistent Memory","Train Custom",
+            "Accuracy"],
+        "v1": ["❌","❌","✅","❌","✅","❌","97.7%"],
+        "v2": ["✅","❌","❌","✅","❌","❌","68%"],
+        "v3": ["✅","✅","✅","✅","✅","✅","93-98%"],
     })
     st.dataframe(comparison, use_container_width=True,
                  hide_index=True)
@@ -596,6 +632,7 @@ with tab4:
         - **SMOTE-ENN** — Class Balancing (Train only)
         - **Autoencoder + IForest** — Anomaly Detection
         - **ONNX Runtime** — Fast Inference
+        - **XGBoost** — Custom Model Training
         - **Persistent Memory** — تحسين مستمر
 
         ### 📞 التواصل
@@ -631,6 +668,8 @@ with tab4:
         'Built with ❤️ using Streamlit + ONNX Runtime'
         '</p>',
         unsafe_allow_html=True)
+
+
 # ══════════════════════════════════════════════════════════════
 # Tab 5 — Train Custom Model
 # ══════════════════════════════════════════════════════════════
@@ -641,18 +680,21 @@ with tab5:
         "تلقائياً في 30-60 ثانية باستخدام XGBoost. "
         "النموذج الأصلي لن يتأثر.")
 
-    # ── تحذير ─────────────────────────────────────────────────
     if "custom_model" in st.session_state:
+        cm = st.session_state["custom_meta"]
         st.success(
-            f"✅ يوجد نموذج مخصص محمّل — "
-            f"Classes: "
-            f"{st.session_state['custom_meta']['classes']}")
-        if st.button("🗑️ حذف النموذج المخصص والرجوع "
-                     "للنموذج الأصلي",
-                     key="btn_delete_custom"):
+            f"✅ نموذج مخصص محمّل — "
+            f"Classes: {cm['classes']}  "
+            f"Accuracy: "
+            f"{cm['metrics'].get('accuracy',0)*100:.1f}%")
+        if st.button(
+                "🗑️ حذف النموذج المخصص والرجوع "
+                "للنموذج الأصلي",
+                key="btn_delete_custom"):
             del st.session_state["custom_model"]
             del st.session_state["custom_meta"]
-            st.success("✅ تم الحذف — النموذج الأصلي نشط")
+            st.success(
+                "✅ تم الحذف — النموذج الأصلي نشط")
             st.rerun()
 
     st.markdown("---")
@@ -691,10 +733,8 @@ with tab5:
             st.dataframe(df_train.head(5),
                          use_container_width=True)
 
-        # ── إعدادات التدريب ───────────────────────────────────
         st.markdown("### ⚙️ إعدادات التدريب")
         tc1, tc2, tc3 = st.columns(3)
-
         with tc1:
             train_label = st.text_input(
                 "عمود الـ Label",
@@ -707,21 +747,18 @@ with tab5:
                 key="train_benign_label")
         with tc3:
             max_rows = st.number_input(
-                "أقصى عدد صفوف للتدريب",
+                "أقصى عدد صفوف",
                 min_value=500,
                 max_value=50000,
                 value=10000,
                 step=500)
 
-        # تحقق من الـ label
         if train_label in df_train.columns:
             vc = df_train[train_label].value_counts()
             st.info(
                 f"✅ عمود '{train_label}' موجود — "
                 f"{len(vc)} كلاس: "
                 f"{vc.head(5).to_dict()}")
-
-            # عرض توزيع الكلاسات
             fig, ax = plt.subplots(figsize=(10, 3))
             vc.plot(kind="barh", ax=ax,
                     color="#3498db", alpha=0.8)
@@ -731,12 +768,10 @@ with tab5:
             plt.tight_layout()
             st.pyplot(fig)
             plt.close()
-
         else:
             st.warning(
                 f"⚠️ عمود '{train_label}' غير موجود")
 
-        # ── زر التدريب ────────────────────────────────────────
         st.markdown("---")
         if st.button("🚀 ابدأ التدريب",
                      type="primary",
@@ -746,12 +781,13 @@ with tab5:
             if train_label not in df_train.columns:
                 st.error(
                     f"❌ عمود '{train_label}' "
-                    f"غير موجود في الملف")
+                    f"غير موجود")
                 st.stop()
 
             if len(df_train) < 100:
-                st.error("❌ الداتاست صغيرة جداً — "
-                         "يجب على الأقل 100 صف")
+                st.error(
+                    "❌ الداتاست صغيرة جداً — "
+                    "يجب على الأقل 100 صف")
                 st.stop()
 
             from inference import train_custom_model
@@ -763,13 +799,9 @@ with tab5:
                     "🔧 جاري التدريب على CPU..."):
                 status.text("⚙️ تحليل البيانات...")
                 progress.progress(10)
-
-                status.text(
-                    "🔬 Feature Selection...")
+                status.text("🔬 Feature Selection...")
                 progress.progress(30)
-
-                status.text(
-                    "🤖 تدريب XGBoost...")
+                status.text("🤖 تدريب XGBoost...")
                 progress.progress(50)
 
                 train_results = train_custom_model(
@@ -781,7 +813,6 @@ with tab5:
                 progress.progress(90)
 
                 if train_results["success"]:
-                    # حفظ في session_state
                     st.session_state[
                         "custom_model"] = {
                         "model"   : train_results["model"],
@@ -791,59 +822,45 @@ with tab5:
                     }
                     st.session_state[
                         "custom_meta"] = {
-                        "classes"  : train_results["classes"],
-                        "n_classes": train_results["n_classes"],
-                        "n_samples": train_results["n_samples"],
-                        "features" : train_results["features"],
-                        "metrics"  : train_results["metrics"],
-                        "label_col"    : train_label,
-                        "benign_label" : train_benign,
+                        "classes"     : train_results["classes"],
+                        "n_classes"   : train_results["n_classes"],
+                        "n_samples"   : train_results["n_samples"],
+                        "features"    : train_results["features"],
+                        "metrics"     : train_results["metrics"],
+                        "label_col"   : train_label,
+                        "benign_label": train_benign,
                     }
 
                     progress.progress(100)
                     status.text("✅ اكتمل التدريب!")
 
-                    # ── نتائج التدريب ─────────────────────────
                     st.markdown("---")
                     st.markdown("## 🏆 نتائج التدريب")
 
                     m = train_results["metrics"]
-                    rc1, rc2, rc3 = st.columns(3)
-                    with rc1:
-                        acc = m["accuracy"]*100
-                        cl  = ("status-excellent"
-                               if acc>90 else
-                               "status-good" if acc>80
-                               else "status-warning")
-                        st.markdown(
-                            f'<p class="metric-value {cl}">'
-                            f'{acc:.2f}%</p>'
-                            f'<p class="metric-label">'
-                            f'Accuracy</p>',
-                            unsafe_allow_html=True)
-                    with rc2:
-                        wf1 = m["weighted_f1"]*100
-                        st.markdown(
-                            f'<p class="metric-value '
-                            f'status-good">{wf1:.2f}%</p>'
-                            f'<p class="metric-label">'
-                            f'Weighted F1</p>',
-                            unsafe_allow_html=True)
-                    with rc3:
-                        mf1 = m["macro_f1"]*100
-                        cl2 = ("status-excellent"
-                               if mf1>80 else
-                               "status-good" if mf1>60
-                               else "status-warning")
-                        st.markdown(
-                            f'<p class="metric-value {cl2}">'
-                            f'{mf1:.2f}%</p>'
-                            f'<p class="metric-label">'
-                            f'Macro F1</p>',
-                            unsafe_allow_html=True)
+                    rc1,rc2,rc3 = st.columns(3)
+                    for col, (name, val, hi, lo) in zip(
+                            [rc1,rc2,rc3], [
+                                ("Accuracy",
+                                 m["accuracy"]*100,90,80),
+                                ("Weighted F1",
+                                 m["weighted_f1"]*100,90,80),
+                                ("Macro F1",
+                                 m["macro_f1"]*100,80,60),
+                            ]):
+                        with col:
+                            cl = ("status-excellent"
+                                  if val>hi else
+                                  "status-good" if val>lo
+                                  else "status-warning")
+                            st.markdown(
+                                f'<p class="metric-value {cl}">'
+                                f'{val:.2f}%</p>'
+                                f'<p class="metric-label">'
+                                f'{name}</p>',
+                                unsafe_allow_html=True)
 
-                    # معلومات إضافية
-                    ic1, ic2, ic3 = st.columns(3)
+                    ic1,ic2,ic3 = st.columns(3)
                     with ic1:
                         st.metric(
                             "عدد الكلاسات",
@@ -870,7 +887,6 @@ with tab5:
                         "✅ النموذج المخصص جاهز! "
                         "انتقل لـ **🔍 تحليل الشبكة** "
                         "وارفع ملفاً من نفس الداتاست.")
-
                 else:
                     progress.progress(0)
                     st.error(train_results["message"])
