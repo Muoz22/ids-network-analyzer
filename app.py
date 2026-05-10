@@ -149,14 +149,17 @@ with tab1:
                      f"{df.columns.tolist()}")
 
         if label_col in df.columns:
-            st.info(f"✅ عمود '{label_col}' موجود — "
-                    f"{df[label_col].value_counts().head(5).to_dict()}")
+            st.info(
+                f"✅ عمود '{label_col}' موجود — "
+                f"{df[label_col].value_counts().head(5).to_dict()}")
         else:
-            st.warning(f"⚠️ عمود '{label_col}' غير موجود")
+            st.warning(
+                f"⚠️ عمود '{label_col}' غير موجود")
 
         if st.button("🚀 ابدأ التحليل",
                      type="primary",
-                     use_container_width=True):
+                     use_container_width=True,
+                     key="btn_analyze"):
 
             models, err = load_models_cached(version="v3")
             if err:
@@ -183,13 +186,11 @@ with tab1:
                 status.text("📊 إنتاج الرسوم...")
                 progress.progress(80)
 
-                # استخدم مجلد مؤقت واحفظ الصور كـ bytes
                 with tempfile.TemporaryDirectory() as tmp:
                     plot_paths = make_plots(
                         results, benign_label,
                         out_dir=tmp)
-
-                    # احفظ كـ bytes قبل حذف tmp
+                    # حفظ كـ bytes قبل حذف tmp
                     plot_bytes = []
                     for title, path in plot_paths:
                         try:
@@ -202,7 +203,6 @@ with tab1:
                 progress.progress(100)
                 status.text("✅ اكتمل!")
 
-                # حفظ في session_state
                 st.session_state["results"]    = results
                 st.session_state["plot_bytes"] = plot_bytes
 
@@ -217,7 +217,8 @@ with tab1:
 
                 c1,c2,c3,c4 = st.columns(4)
                 with c1:
-                    st.metric("إجمالي العينات", f"{total:,}")
+                    st.metric("إجمالي العينات",
+                              f"{total:,}")
                 with c2:
                     st.metric("✅ Benign", f"{benign:,}",
                               f"{100*benign/total:.1f}%")
@@ -238,11 +239,11 @@ with tab1:
                     for col, (name, val, hi, lo) in zip(
                             [mc1,mc2,mc3], [
                                 ("Accuracy",
-                                 m["accuracy"]*100, 97, 93),
+                                 m["accuracy"]*100,97,93),
                                 ("Weighted F1",
-                                 m["weighted_f1"]*100, 95, 90),
+                                 m["weighted_f1"]*100,95,90),
                                 ("Macro F1",
-                                 m["macro_f1"]*100, 80, 60),
+                                 m["macro_f1"]*100,80,60),
                             ]):
                         with col:
                             cl = ("status-excellent"
@@ -263,11 +264,12 @@ with tab1:
                         results["atk_counts"].most_common(20),
                         columns=["نوع الهجوم","العدد"])
                     atk_df["النسبة %"] = (
-                        atk_df["العدد"]/total*100).round(2)
+                        atk_df["العدد"]/total*100
+                    ).round(2)
                     st.dataframe(atk_df,
                                  use_container_width=True)
 
-                # ── الرسوم الأساسية ───────────────────────
+                # ── الرسوم ────────────────────────────────
                 if plot_bytes:
                     st.markdown("### 📊 الرسوم البيانية")
                     for i in range(0, len(plot_bytes), 2):
@@ -292,11 +294,13 @@ with tab1:
                     st.write(f"**Features مطابقة:** "
                              f"{results['matched_feats']}")
                     if results["missing_feats"]:
-                        st.warning(f"**مفقودة:** "
-                                   f"{results['missing_feats']}")
+                        st.warning(
+                            f"**مفقودة:** "
+                            f"{results['missing_feats']}")
                     if results["removed_cols"]:
-                        st.info(f"**مستُبعدت:** "
-                                f"{list(results['removed_cols'].keys())}")
+                        st.info(
+                            f"**مستُبعدت:** "
+                            f"{list(results['removed_cols'].keys())}")
 
                 # ── تحميل ─────────────────────────────────
                 st.markdown("### 💾 تحميل النتائج")
@@ -311,10 +315,12 @@ with tab1:
                     f"ids_results_"
                     f"{datetime.now():%Y%m%d_%H%M}.csv",
                     "text/csv",
-                    use_container_width=True)
+                    use_container_width=True,
+                    key="download_tab1_csv")
 
-                st.info("💡 انتقل لـ **📊 تقرير تفصيلي** "
-                        "لرؤية كل الرسوم والتحليل الكامل")
+                st.info(
+                    "💡 انتقل لـ **📊 تقرير تفصيلي** "
+                    "لرؤية كل الرسوم والتحليل الكامل")
 
 
 # ══════════════════════════════════════════════════════════════
@@ -351,13 +357,13 @@ with tab2:
         # ── Decision Analysis ──────────────────────────────
         st.markdown("---")
         st.markdown("### 🎯 Decision Analysis")
-        dc1, dc2 = st.columns(2)
 
         pie_imgs = [(t,img) for t,img in plot_bytes
                     if "Distribution" in t or "Pie" in t]
         atk_imgs = [(t,img) for t,img in plot_bytes
                     if "Attack" in t]
 
+        dc1, dc2 = st.columns(2)
         with dc1:
             if pie_imgs:
                 st.markdown("**Decision Distribution**")
@@ -372,17 +378,18 @@ with tab2:
         # ── Classification Performance ─────────────────────
         if "accuracy" in m:
             st.markdown("---")
-            st.markdown("### 📈 Classification Performance")
+            st.markdown(
+                "### 📈 Classification Performance")
 
             mc1,mc2,mc3 = st.columns(3)
             for col, (name, val, hi, lo) in zip(
                     [mc1,mc2,mc3], [
                         ("Accuracy",
-                         m["accuracy"]*100, 97, 93),
+                         m["accuracy"]*100,97,93),
                         ("Weighted F1",
-                         m["weighted_f1"]*100, 95, 90),
+                         m["weighted_f1"]*100,95,90),
                         ("Macro F1",
-                         m["macro_f1"]*100, 80, 60),
+                         m["macro_f1"]*100,80,60),
                     ]):
                 with col:
                     cl = ("status-excellent" if val>hi
@@ -415,7 +422,8 @@ with tab2:
 
             if "report" in m:
                 st.markdown("---")
-                st.markdown("### 📋 Classification Report")
+                st.markdown(
+                    "### 📋 Classification Report")
                 st.code(m["report"])
 
         # ── Confidence Analysis ────────────────────────────
@@ -436,7 +444,8 @@ with tab2:
                     plot_bytes[i:i+2]):
                 with cols[j]:
                     st.markdown(f"**{title}**")
-                    st.image(img, use_column_width=True)
+                    st.image(img,
+                             use_column_width=True)
 
         # ── Download ───────────────────────────────────────
         st.markdown("---")
@@ -454,7 +463,8 @@ with tab2:
                 f"ids_results_"
                 f"{datetime.now():%Y%m%d_%H%M}.csv",
                 "text/csv",
-                use_container_width=True)
+                use_container_width=True,
+                key="download_tab2_csv")
         with c2:
             if "report" in m:
                 st.download_button(
@@ -463,7 +473,8 @@ with tab2:
                     f"ids_report_"
                     f"{datetime.now():%Y%m%d_%H%M}.txt",
                     "text/plain",
-                    use_container_width=True)
+                    use_container_width=True,
+                    key="download_tab2_txt")
 
 
 # ══════════════════════════════════════════════════════════════
@@ -504,7 +515,8 @@ with tab3:
         st.markdown(
             f'<div class="agent-card" '
             f'style="border-color:{color}">'
-            f'<strong style="color:{color};font-size:1.1rem;">'
+            f'<strong style="color:{color};'
+            f'font-size:1.1rem;">'
             f'Agent {num} — {name}</strong><br><br>'
             f'{desc}</div>',
             unsafe_allow_html=True)
@@ -529,9 +541,10 @@ Agent 6: ALLOW / BLOCK / QUARANTINE
 
     st.markdown("### 📊 مقارنة الإصدارات")
     comparison = pd.DataFrame({
-        "الميزة": ["أي داتاست","SMOTE صحيح",
-                   "Boruta+SHAP","Behavioral AE",
-                   "Persistent Memory","Accuracy"],
+        "الميزة": [
+            "أي داتاست","SMOTE صحيح",
+            "Boruta+SHAP","Behavioral AE",
+            "Persistent Memory","Accuracy"],
         "v1": ["❌","❌","✅","❌","✅","97.7%"],
         "v2": ["✅","❌","❌","✅","❌","68%"],
         "v3": ["✅","✅","✅","✅","✅","93-98%"],
