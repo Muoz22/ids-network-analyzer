@@ -635,6 +635,47 @@ with tab1:
                     use_container_width=True,
                     key="download_tab1_csv")
 
+                # ── رسوم التفسير ──────────────────────────
+                try:
+                    from inference import \
+                        make_explainability_plots
+                    with tempfile.TemporaryDirectory() \
+                            as tmp2:
+                        exp_paths = \
+                            make_explainability_plots(
+                                results,
+                                models_global,
+                                out_dir=tmp2)
+                        exp_bytes = []
+                        for title, path in exp_paths:
+                            try:
+                                with open(
+                                        path, "rb") as f:
+                                    exp_bytes.append(
+                                        (title,
+                                         f.read()))
+                            except Exception:
+                                pass
+
+                    if exp_bytes:
+                        st.markdown(
+                            "### 🔬 قابلية التفسير")
+                        for i in range(
+                                0, len(exp_bytes), 2):
+                            cols = st.columns(2)
+                            for j, (title, img) in \
+                                    enumerate(
+                                        exp_bytes[i:i+2]):
+                                with cols[j]:
+                                    st.markdown(
+                                        f"**{title}**")
+                                    st.image(
+                                        img,
+                                        use_column_width=True)
+                        st.session_state[
+                            "exp_bytes"] = exp_bytes
+                except Exception:
+                    pass
                 st.info(
                     "💡 انتقل لـ **📊 تقرير تفصيلي** "
                     "لرؤية كل الرسوم والتحليل الكامل")
@@ -758,6 +799,19 @@ with tab2:
         dash_imgs = [(t,img) for t,img in plot_bytes
                      if "Dashboard" in t or
                      "Summary" in t]
+        # ── Explainability ─────────────────────────────────
+        if "exp_bytes" in st.session_state:
+            st.markdown("---")
+            st.markdown("### 🔬 قابلية التفسير")
+            exp_bytes = st.session_state["exp_bytes"]
+            for i in range(0, len(exp_bytes), 2):
+                cols = st.columns(2)
+                for j, (title, img) in enumerate(
+                        exp_bytes[i:i+2]):
+                    with cols[j]:
+                        st.markdown(f"**{title}**")
+                        st.image(img,
+                                 use_column_width=True)
         if dash_imgs:
             st.image(dash_imgs[0][1],
                      use_column_width=True)
