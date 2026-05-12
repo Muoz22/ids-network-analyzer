@@ -501,7 +501,8 @@ with tab1:
                 with tempfile.TemporaryDirectory() as tmp:
                     plot_paths = make_plots(
                         results, final_bl,
-                        out_dir=tmp)
+                        out_dir=tmp,
+                        models_ref=models_global)
                     plot_bytes = []
                     for title, path in plot_paths:
                         try:
