@@ -278,20 +278,17 @@ with st.sidebar:
     st.markdown("---")
     st.markdown("### 📊 النموذج")
 
+    # ── عرض النموذج بدون Accuracy أو dataset name ─────────
     if models_global and "meta" in models_global:
         meta = models_global["meta"]
-        st.success("✅ النموذج الأصلي (TON-IoT)")
-        st.write(f"**Accuracy:** "
-                 f"{meta.get('accuracy',0)*100:.2f}%")
+        st.success("✅ AI Agents IDS")
+        st.write("**النموذج:** FT-Transformer (Universal)")
         st.write(f"**Classes:** "
-                 f"{meta.get('n_classes',0)}")
+                 f"{meta.get('n_classes', 0)}")
         st.write(f"**Features:** "
-                 f"{meta.get('n_features',0)}")
-        with st.expander("🔍 التفاصيل"):
-            st.write("**Class Names:**")
-            for c in meta.get("class_names", []):
-                st.write(f"  • {c}")
-            st.write("**Features:**")
+                 f"{meta.get('n_features', 0)}")
+        st.write("**يدعم:** أي داتاست شبكية")
+        with st.expander("🔍 الـ Features"):
             for f in meta.get("feat_cols", []):
                 st.write(f"  • {f}")
     elif models_err:
@@ -810,10 +807,10 @@ with tab2:
 with tab3:
     st.markdown("## 🤖 كيف يعمل النظام")
     st.markdown("""
-    ### 🧠 الفكرة الأساسية
-    ارفع أي داتاست → اضغط **ابدأ التحليل** → النتائج فوراً.
-    النظام يقرر تلقائياً هل يدرّب نموذجاً جديداً أم يستخدم
-    النموذج الحالي — بدون تدخل من المستخدم.
+### 🧠 الفكرة الأساسية
+ارفع أي داتاست → اضغط **ابدأ التحليل** → النتائج فوراً.
+النظام يقرر تلقائياً هل يدرّب نموذجاً جديداً أم يستخدم
+النموذج الحالي — بدون تدخل من المستخدم.
     """)
 
     agents = [
@@ -864,23 +861,6 @@ with tab3:
 النتائج: ALLOW / BLOCK / QUARANTINE + 10 رسوم
     """)
 
-    st.markdown("### 📊 مقارنة الإصدارات")
-    comparison = pd.DataFrame({
-        "الميزة": [
-            "أي داتاست","SMOTE صحيح",
-            "Boruta+SHAP","Behavioral AE",
-            "Persistent Memory","Auto Training",
-            "Smart Detection","Accuracy"],
-        "v1": ["❌","❌","✅","❌","✅",
-               "❌","❌","97.7%"],
-        "v2": ["✅","❌","❌","✅","❌",
-               "❌","❌","68%"],
-        "v3": ["✅","✅","✅","✅","✅",
-               "✅","✅","93-99%"],
-    })
-    st.dataframe(comparison, use_container_width=True,
-                 hide_index=True)
-
 
 # ══════════════════════════════════════════════════════════════
 # Tab 4
@@ -928,21 +908,17 @@ with tab4:
     if models_global and "meta" in models_global:
         meta = models_global["meta"]
         st.markdown("---")
-        st.markdown("### 🔍 معلومات النموذج الحالي")
+        st.markdown("### 🔍 معلومات النموذج")
         info_df = pd.DataFrame({
             "المعلومة": [
-                "Accuracy","Weighted F1","Macro F1",
-                "Features","Classes","Session #",
-                "Trained on","Trained at"],
+                "النوع","Features","Classes",
+                "Session #","Trained at"],
             "القيمة": [
-                f"{meta.get('accuracy',0)*100:.2f}%",
-                f"{meta.get('weighted_f1',0)*100:.2f}%",
-                f"{meta.get('macro_f1',0)*100:.2f}%",
-                str(meta.get('n_features',0)),
-                str(meta.get('n_classes',0)),
-                str(meta.get('session',0)),
-                meta.get('trained_on','').split('/')[-2],
-                meta.get('trained_at','')[:10],
+                "FT-Transformer Universal",
+                str(meta.get('n_features', 0)),
+                str(meta.get('n_classes', 0)),
+                str(meta.get('session', 0)),
+                meta.get('trained_at', '')[:10],
             ]
         })
         st.dataframe(info_df, use_container_width=True,
@@ -963,7 +939,7 @@ with tab4:
         '<p style="color:#a0aec0;margin:0.3rem 0;">'
         '<a href="https://github.com/Muoz22/'
         'ids-network-analyzer" style="color:#00d4ff;">'
-        'github.com/Muoz22/ids-network-analyzer</a>'
+        'GitHub</a>'
         ' &nbsp;|&nbsp; '
         '<a href="https://scholar.google.com/citations'
         '?user=J35vcAIAAAAJ&hl=en" style="color:#00d4ff;">'
