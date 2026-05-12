@@ -944,22 +944,24 @@ with tab4:
 
     st.markdown("---")
     st.markdown("---")
-    st.markdown("""
-    <div style="text-align:center;padding:1rem;
-    background:linear-gradient(135deg,#1a1a2e,#0f3460);
-    border-radius:10px;">
-    <p style="color:#00d4ff;font-size:1.2rem;
-    font-weight:bold;margin:0;">
-    🛡️ AI Agents IDS v3 Universal</p>
-    <p style="color:#a0aec0;margin:0.3rem 0;">
-    © 2025 <strong style="color:white;">
-    Muaz Al-Soufi</strong> — All Rights Reserved</p>
-    <p style="color:#a0aec0;margin:0.3rem 0;">
-    <a href="https://github.com/Muoz22/ids-network-analyzer"
-    style="color:#00d4ff;">
-    github.com/Muoz22/ids-network-analyzer</a></p>
-    <p style="color:#666;font-size:0.8rem;margin:0.3rem 0;">
-    Built with ❤️ using Streamlit · ONNX Runtime ·
-    FT-Transformer · RandomForest</p>
-    </div>
-    """, unsafe_allow_html=True)
+    footer_html = (
+        '<div style="text-align:center;padding:1rem;'
+        'background:linear-gradient(135deg,#1a1a2e,#0f3460);'
+        'border-radius:10px;">'
+        '<p style="color:#00d4ff;font-size:1.2rem;'
+        'font-weight:bold;margin:0;">'
+        '🛡️ AI Agents IDS v3 Universal</p>'
+        '<p style="color:#a0aec0;margin:0.3rem 0;">'
+        '© 2025 <strong style="color:white;">'
+        'Muaz Al-Soufi</strong> — All Rights Reserved</p>'
+        '<p style="color:#a0aec0;margin:0.3rem 0;">'
+        '<a href="https://github.com/Muoz22/'
+        'ids-network-analyzer" style="color:#00d4ff;">'
+        'github.com/Muoz22/ids-network-analyzer</a></p>'
+        '<p style="color:#666;font-size:0.8rem;'
+        'margin:0.3rem 0;">'
+        'Built with ❤️ using Streamlit · ONNX Runtime · '
+        'FT-Transformer · RandomForest</p>'
+        '</div>'
+    )
+    st.markdown(footer_html, unsafe_allow_html=True)
