@@ -162,10 +162,32 @@ def smart_detect(df):
     return result
 
 
+def apply_detection(df, mode, detection,
+                    manual_lc, manual_bl):
+    if mode == "🤖 Auto (ذكي)":
+        if detection["label_col"]:
+            return (detection["label_col"],
+                    detection["benign_label"],
+                    detection["problem_type"])
+        return manual_lc, manual_bl, "unknown"
+    elif mode == "🟢 Multi-class (أنواع هجمات)":
+        for opt in detection.get("all_options", []):
+            if opt["n_unique"] > 2 and opt["found_benign"]:
+                return (opt["col"],
+                        opt["found_benign"],
+                        "multiclass")
+        return manual_lc, manual_bl, "multiclass"
+    elif mode == "🟡 Binary (هجوم/طبيعي)":
+        for opt in detection.get("all_options", []):
+            if opt["n_unique"] == 2:
+                return (opt["col"],
+                        opt["found_benign"] or "0",
+                        "binary")
+        return manual_lc, manual_bl, "binary"
+    return manual_lc, manual_bl, "unknown"
+
+
 def is_compatible(df, model_features):
-    """
-    هل الداتاست متوافقة مع النموذج الحالي؟
-    """
     if not model_features:
         return False, 0.0
     available = df.columns.tolist()
@@ -175,43 +197,31 @@ def is_compatible(df, model_features):
     return pct >= 0.7, pct
 
 
-def auto_train_if_needed(df, detection,
-                         use_lc, use_bl,
+def auto_train_if_needed(df, use_lc, use_bl,
                          status_placeholder):
     """
-    يدرّب نموذجاً تلقائياً إذا كانت الداتاست
-    غير متوافقة مع النموذج الحالي.
-    يعمل ضمنياً بدون إظهار أي شيء للمستخدم.
-    يُرجع True إذا درّب نموذجاً جديداً.
+    يدرّب نموذجاً تلقائياً ضمنياً
+    إذا كانت الداتاست غير متوافقة.
     """
     from inference import train_custom_model
-
-    # ── هل يوجد نموذج مخصص نشط؟ ──────────────────────────
-    if "custom_model" in st.session_state:
-        cm_feats = st.session_state[
-            "custom_meta"]["features"]
-        compatible, pct = is_compatible(df, cm_feats)
-        if compatible:
-            return False  # النموذج المخصص متوافق
 
     # ── هل النموذج الأصلي متوافق؟ ─────────────────────────
     models, err = load_models_cached(version="v3")
     if not err and models:
-        orig_feats = models.get("features", [])
+        orig_feats  = models.get("features", [])
         compatible, pct = is_compatible(df, orig_feats)
         if compatible:
-            # حذف النموذج المخصص القديم لو كان غير متوافق
-            if "custom_model" in st.session_state:
-                del st.session_state["custom_model"]
-                del st.session_state["custom_meta"]
-            return False  # النموذج الأصلي متوافق
+            # احذف أي نموذج مخصص قديم
+            if "_auto_custom_model" in st.session_state:
+                del st.session_state["_auto_custom_model"]
+                del st.session_state["_auto_custom_meta"]
+            return False
 
-    # ── لا يوجد نموذج متوافق → درّب تلقائياً ─────────────
+    # ── لا يوجد نموذج متوافق → درّب ضمنياً ───────────────
     if not use_lc or use_lc not in df.columns:
-        return False  # لا يمكن التدريب بدون label
+        return False
 
-    status_placeholder.text(
-        "🔧 داتاست جديدة — جاري التدريب التلقائي...")
+    status_placeholder.text("⚙️ تحليل الداتاست...")
 
     train_results = train_custom_model(
         df,
@@ -220,16 +230,15 @@ def auto_train_if_needed(df, detection,
         max_rows     = 10000)
 
     if train_results["success"]:
-        st.session_state["custom_model"] = {
+        st.session_state["_auto_custom_model"] = {
             "model"   : train_results["model"],
             "scaler"  : train_results["scaler"],
             "le"      : train_results["le"],
             "features": train_results["features"],
         }
-        st.session_state["custom_meta"] = {
+        st.session_state["_auto_custom_meta"] = {
             "classes"     : train_results["classes"],
             "n_classes"   : train_results["n_classes"],
-            "n_samples"   : train_results["n_samples"],
             "features"    : train_results["features"],
             "metrics"     : train_results["metrics"],
             "label_col"   : use_lc,
@@ -251,6 +260,7 @@ def load_models_cached(version="v3"):
 
 models_global, models_err = load_models_cached(version="v3")
 
+# ── Sidebar ───────────────────────────────────────────────────
 with st.sidebar:
     st.markdown("### ⚙️ إعدادات التحليل")
     default_lc = "type"
@@ -271,19 +281,8 @@ with st.sidebar:
     st.markdown("---")
     st.markdown("### 📊 النموذج")
 
-    if "custom_meta" in st.session_state:
-        st.warning("🔧 النموذج المخصص نشط")
-        cm = st.session_state["custom_meta"]
-        st.write(f"**Classes:** {cm['n_classes']}")
-        st.write(f"**Features:** {len(cm['features'])}")
-        acc = cm["metrics"].get("accuracy", 0)*100
-        st.write(f"**Accuracy:** {acc:.2f}%")
-        if st.button("🗑️ حذف النموذج المخصص",
-                     key="sidebar_delete"):
-            del st.session_state["custom_model"]
-            del st.session_state["custom_meta"]
-            st.rerun()
-    elif models_global and "meta" in models_global:
+    # الـ sidebar يعرض النموذج الأصلي فقط
+    if models_global and "meta" in models_global:
         meta = models_global["meta"]
         st.success("✅ النموذج الأصلي (TON-IoT)")
         st.write(f"**Accuracy:** "
@@ -308,12 +307,12 @@ with st.sidebar:
         "[GitHub](https://github.com/Muoz22/ids-network-analyzer)")
 
 
-tab1, tab2, tab3, tab4, tab5 = st.tabs([
+# ── 4 Tabs فقط (بدون Train Custom Model) ─────────────────────
+tab1, tab2, tab3, tab4 = st.tabs([
     "🔍 تحليل الشبكة",
     "📊 تقرير تفصيلي",
     "📖 كيف يعمل",
     "📋 عن المشروع",
-    "🔧 Train Custom Model",
 ])
 
 
@@ -361,43 +360,78 @@ with tab1:
         # ── Smart Detection ────────────────────────────────
         detection = smart_detect(df)
 
-        # عرض الاكتشاف للمستخدم بشكل مبسط
-        if detection["label_col"]:
-            st.info(
-                f"🔍 اكتشفنا: "
-                f"Label=`{detection['label_col']}` | "
-                f"Benign=`{detection['benign_label']}` | "
-                f"Classes={detection['n_classes']}")
-            use_lc   = detection["label_col"]
-            use_bl   = detection["benign_label"]
-            use_type = detection["problem_type"]
-        else:
-            st.warning("⚠️ اكتب اسم عمود الـ Label يدوياً")
-            use_lc   = label_col
-            use_bl   = benign_label
-            use_type = "unknown"
+        st.markdown("### 🎯 نوع التحليل")
+        dc1, dc2 = st.columns([1, 1])
 
-        # خيار تعديل يدوي بسيط
-        with st.expander("✏️ تعديل يدوي (اختياري)"):
+        with dc1:
+            if detection["label_col"]:
+                conf_color = (
+                    "🟢" if detection["confidence"] >= 90
+                    else "🟡" if detection["confidence"] >= 70
+                    else "🔴")
+                st.success(
+                    f"{conf_color} **اكتشاف تلقائي** "
+                    f"(ثقة {detection['confidence']}%)\n\n"
+                    f"**النوع:** {detection['problem_type']}\n\n"
+                    f"**Label:** `{detection['label_col']}`\n\n"
+                    f"**Benign:** `{detection['benign_label']}`\n\n"
+                    f"**Classes:** {detection['n_classes']}\n\n"
+                    f"**السبب:** {detection['reason']}")
+            else:
+                st.warning(
+                    "⚠️ لم يُعثر على عمود label تلقائياً\n\n"
+                    "اختر **Manual** وأدخل المعلومات يدوياً")
+
+        with dc2:
+            analysis_mode = st.radio(
+                "اختر طريقة التحليل:",
+                ["🤖 Auto (ذكي)",
+                 "🟢 Multi-class (أنواع هجمات)",
+                 "🟡 Binary (هجوم/طبيعي)",
+                 "✏️ Manual (يدوي)"],
+                index=0,
+                key="analysis_mode_tab1")
+
+        # ── Manual override ────────────────────────────────
+        if analysis_mode == "✏️ Manual (يدوي)":
             mc1, mc2 = st.columns(2)
             with mc1:
-                use_lc = st.selectbox(
-                    "عمود الـ Label:",
+                manual_lc = st.selectbox(
+                    "اختر عمود الـ Label:",
                     options=df.columns.tolist(),
-                    index=df.columns.tolist().index(use_lc)
-                    if use_lc in df.columns else 0,
-                    key="manual_lc")
+                    index=0,
+                    key="manual_lc_tab1")
             with mc2:
-                if use_lc in df.columns:
-                    vals = [str(v) for v in
-                            df[use_lc].unique().tolist()]
-                    idx  = vals.index(use_bl) \
-                        if use_bl in vals else 0
-                    use_bl = st.selectbox(
-                        "الكلاس الطبيعي:",
-                        options=vals,
-                        index=idx,
-                        key="manual_bl")
+                if manual_lc in df.columns:
+                    vals = df[manual_lc].unique().tolist()
+                    manual_bl = st.selectbox(
+                        "اختر الكلاس الطبيعي:",
+                        options=[str(v) for v in vals],
+                        key="manual_bl_tab1")
+                else:
+                    manual_bl = st.text_input(
+                        "اكتب الكلاس الطبيعي:",
+                        value="normal",
+                        key="manual_bl_text_tab1")
+            use_lc   = manual_lc
+            use_bl   = str(manual_bl)
+            use_type = "manual"
+        else:
+            use_lc, use_bl, use_type = apply_detection(
+                df, analysis_mode, detection,
+                label_col, benign_label)
+
+        # ── عرض الاختيار النهائي ──────────────────────────
+        st.markdown(
+            f"**الاختيار النهائي:** "
+            f"Label=`{use_lc}` | "
+            f"Benign=`{use_bl}` | "
+            f"Type=`{use_type}`")
+
+        if use_lc in df.columns:
+            vc = df[use_lc].value_counts()
+            st.info(f"✅ `{use_lc}`: "
+                    f"{vc.head(5).to_dict()}")
 
         # ── زر التحليل ────────────────────────────────────
         if st.button("🚀 ابدأ التحليل",
@@ -420,46 +454,28 @@ with tab1:
                 progress.progress(10)
 
                 trained_new = auto_train_if_needed(
-                    df, detection,
-                    use_lc, use_bl,
-                    status)
+                    df, use_lc, use_bl, status)
 
-                progress.progress(30)
-
-                # ── تشغيل النموذج المناسب ─────────────────
+                progress.progress(35)
                 status.text("🤖 تشغيل التحليل...")
                 progress.progress(50)
 
-                if "custom_model" in st.session_state:
-                    # تأكد من توافق النموذج المخصص
-                    cm_feats = st.session_state[
-                        "custom_meta"]["features"]
-                    compatible, pct = is_compatible(
-                        df, cm_feats)
-
-                    if compatible:
-                        cm_lc = st.session_state[
-                            "custom_meta"]["label_col"]
-                        cm_bl = st.session_state[
-                            "custom_meta"]["benign_label"]
-                        results = run_inference_custom(
-                            df,
-                            st.session_state["custom_model"],
-                            cm_lc, cm_bl,
-                            ft_unk_thr=threshold)
-                    else:
-                        # النموذج المخصص غير متوافق
-                        # استخدم الأصلي
-                        models, err = load_models_cached(
-                            version="v3")
-                        if err:
-                            st.error(f"❌ {err}")
-                            st.stop()
-                        results = run_inference(
-                            df, models,
-                            use_lc, use_bl,
-                            ft_unk_thr=threshold)
+                # ── اختر النموذج المناسب ──────────────────
+                if "_auto_custom_model" in st.session_state:
+                    # نموذج مخصص تدرّب تلقائياً
+                    auto_cm = st.session_state[
+                        "_auto_custom_model"]
+                    auto_lc = st.session_state[
+                        "_auto_custom_meta"]["label_col"]
+                    auto_bl = st.session_state[
+                        "_auto_custom_meta"]["benign_label"]
+                    results = run_inference_custom(
+                        df, auto_cm,
+                        auto_lc, auto_bl,
+                        ft_unk_thr=threshold)
+                    model_used = "🔧 Auto-trained (RandomForest)"
                 else:
+                    # النموذج الأصلي
                     models, err = load_models_cached(
                         version="v3")
                     if err:
@@ -469,15 +485,21 @@ with tab1:
                         df, models,
                         use_lc, use_bl,
                         ft_unk_thr=threshold)
+                    model_used = "🔵 Original (FT-Transformer)"
 
                 status.text("📊 إنتاج الرسوم...")
                 progress.progress(80)
 
+                final_bl = (
+                    st.session_state["_auto_custom_meta"]
+                    ["benign_label"]
+                    if "_auto_custom_model" in
+                    st.session_state
+                    else use_bl)
+
                 with tempfile.TemporaryDirectory() as tmp:
                     plot_paths = make_plots(
-                        results,
-                        results.get("benign_label",
-                                    use_bl),
+                        results, final_bl,
                         out_dir=tmp)
                     plot_bytes = []
                     for title, path in plot_paths:
@@ -572,11 +594,6 @@ with tab1:
                         st.code(m["report"])
 
                 with st.expander("🔍 تفاصيل المعالجة"):
-                    model_used = (
-                        "🔧 Custom (RandomForest)"
-                        if "custom_model" in
-                        st.session_state
-                        else "🔵 Original (FT-Transformer)")
                     st.write(f"**النموذج:** {model_used}")
                     if trained_new:
                         st.info(
@@ -586,6 +603,7 @@ with tab1:
                              f"{results['elapsed_sec']}s")
                     st.write(f"**Label:** `{use_lc}`")
                     st.write(f"**Benign:** `{use_bl}`")
+                    st.write(f"**Type:** `{use_type}`")
                     st.write(f"**Features مطابقة:** "
                              f"{results['matched_feats']}")
                     if results["missing_feats"]:
@@ -732,8 +750,7 @@ with tab2:
         st.markdown("---")
         st.markdown("### 🗂️ Summary Dashboard")
         dash_imgs = [(t,img) for t,img in plot_bytes
-                     if "Dashboard" in t or
-                     "Summary" in t]
+                     if "Dashboard" in t or "Summary" in t]
         if dash_imgs:
             st.image(dash_imgs[0][1],
                      use_column_width=True)
@@ -792,7 +809,8 @@ with tab3:
     agents = [
         ("1","Universal Preprocessor","#2ecc71",
          "يقرأ أي CSV ويُنظّفه تلقائياً — يكتشف timestamps "
-         "وIPs وdata leakage بالمنطق لا بالأسماء."),
+         "وIPs وdata leakage بالمنطق لا بالأسماء. "
+         "يقسم البيانات لـ Train/Test ثم SMOTE على Train فقط."),
         ("2","Smart Feature Selector","#3498db",
          "Boruta + XGBoost + SHAP يختار أهم الـ features. "
          "من 46 عمود يختار 10 فقط."),
@@ -801,7 +819,8 @@ with tab3:
          "+ IsolationForest."),
         ("4","FT-Transformer Classifier","#e74c3c",
          "يصنّف 10-34 نوع هجوم بدقة 93-98%. "
-         "إذا كانت الداتاست جديدة يُستبدل بـ RandomForest تلقائياً."),
+         "إذا كانت الداتاست جديدة يُستبدل بـ RandomForest "
+         "تلقائياً."),
         ("5","Adaptive Learner","#f39c12",
          "KS Test يكتشف Concept Drift. "
          "EWC يحمي الأوزان. Reservoir Sampling للتنوع."),
@@ -826,10 +845,10 @@ with tab3:
      ↓
 🔍 فحص التوافق مع النموذج الحالي
      ↓ متوافق (≥70% features)
-  → تحليل فوري بالنموذج الحالي
+  → تحليل فوري بالنموذج الأصلي
 
-     ↓ غير متوافق
-  → تدريب تلقائي RandomForest (30-60 ثانية)
+     ↓ غير متوافق (داتاست جديدة)
+  → تدريب تلقائي RandomForest (خلف الكواليس)
   → تحليل بالنموذج الجديد
      ↓
 النتائج: ALLOW / BLOCK / QUARANTINE + 10 رسوم
@@ -923,222 +942,3 @@ with tab4:
         'Built with ❤️ using Streamlit + ONNX Runtime'
         '</p>',
         unsafe_allow_html=True)
-
-
-# ══════════════════════════════════════════════════════════════
-# Tab 5 — Train Custom Model (يدوي للمتقدمين)
-# ══════════════════════════════════════════════════════════════
-with tab5:
-    st.markdown("## 🔧 Train Custom Model")
-    st.info(
-        "هذا الـ tab للمستخدمين المتقدمين. "
-        "في العادة النظام يدرّب تلقائياً عند الحاجة. "
-        "استخدم هذا للتحكم اليدوي الكامل.")
-
-    if "custom_model" in st.session_state:
-        cm = st.session_state["custom_meta"]
-        st.success(
-            f"✅ نموذج مخصص محمّل — "
-            f"Classes: {cm['n_classes']}  "
-            f"Accuracy: "
-            f"{cm['metrics'].get('accuracy',0)*100:.1f}%")
-        if st.button(
-                "🗑️ حذف النموذج المخصص والرجوع "
-                "للنموذج الأصلي",
-                key="btn_delete_custom"):
-            del st.session_state["custom_model"]
-            del st.session_state["custom_meta"]
-            st.success(
-                "✅ تم الحذف — النموذج الأصلي نشط")
-            st.rerun()
-
-    st.markdown("---")
-    st.markdown("### 📁 ارفع داتاست التدريب")
-
-    col1, col2 = st.columns([2, 1])
-    with col1:
-        train_file = st.file_uploader(
-            "اختر ملف CSV للتدريب",
-            type=["csv"],
-            key="train_uploader")
-    with col2:
-        st.markdown("""
-        **متطلبات الملف:**
-        - يحتوي على عمود الـ label
-        - على الأقل 500 صف
-        - يفضل 2,000-10,000 صف
-        """)
-
-    if train_file is not None:
-        with st.spinner("جاري قراءة الملف..."):
-            try:
-                df_train = pd.read_csv(
-                    train_file, low_memory=False)
-                st.success(
-                    f"✅ تم تحميل الملف: "
-                    f"{df_train.shape[0]:,} صف × "
-                    f"{df_train.shape[1]} عمود")
-            except Exception as e:
-                st.error(f"❌ خطأ: {e}")
-                st.stop()
-
-        with st.expander("👁️ معاينة البيانات",
-                         expanded=False):
-            st.dataframe(df_train.head(5),
-                         use_container_width=True)
-
-        detection_tr = smart_detect(df_train)
-        st.markdown("### ⚙️ إعدادات التدريب")
-
-        if detection_tr["label_col"]:
-            st.success(
-                f"✅ اكتشفنا — "
-                f"Label: `{detection_tr['label_col']}` | "
-                f"Benign: `{detection_tr['benign_label']}`")
-            default_tl = detection_tr["label_col"]
-            default_tb = detection_tr["benign_label"]
-        else:
-            default_tl = label_col
-            default_tb = benign_label
-
-        tc1, tc2, tc3 = st.columns(3)
-        with tc1:
-            train_label = st.selectbox(
-                "عمود الـ Label:",
-                options=df_train.columns.tolist(),
-                index=df_train.columns.tolist().index(
-                    default_tl)
-                if default_tl in df_train.columns else 0,
-                key="train_label_select")
-        with tc2:
-            if train_label in df_train.columns:
-                vals_tr = [str(v) for v in
-                           df_train[train_label].unique()]
-                idx_bl  = vals_tr.index(default_tb) \
-                    if default_tb in vals_tr else 0
-                train_benign = st.selectbox(
-                    "الكلاس الطبيعي:",
-                    options=vals_tr,
-                    index=idx_bl,
-                    key="train_benign_select")
-            else:
-                train_benign = st.text_input(
-                    "الكلاس الطبيعي:",
-                    value=default_tb,
-                    key="train_benign_text")
-        with tc3:
-            max_rows = st.number_input(
-                "أقصى عدد صفوف",
-                min_value=500,
-                max_value=50000,
-                value=10000,
-                step=500)
-
-        if train_label in df_train.columns:
-            vc = df_train[train_label].value_counts()
-            st.info(
-                f"✅ `{train_label}` — "
-                f"{len(vc)} كلاس: "
-                f"{vc.head(5).to_dict()}")
-            fig, ax = plt.subplots(figsize=(10, 3))
-            vc.head(15).plot(kind="barh", ax=ax,
-                             color="#3498db", alpha=0.8)
-            ax.set_title("توزيع الكلاسات",
-                         fontweight="bold")
-            ax.grid(axis="x", alpha=0.3)
-            plt.tight_layout()
-            st.pyplot(fig)
-            plt.close()
-
-        st.markdown("---")
-        if st.button("🚀 ابدأ التدريب",
-                     type="primary",
-                     use_container_width=True,
-                     key="btn_train"):
-
-            if train_label not in df_train.columns:
-                st.error(f"❌ عمود `{train_label}` "
-                         f"غير موجود")
-                st.stop()
-
-            from inference import train_custom_model
-
-            progress = st.progress(0)
-            status   = st.empty()
-
-            with st.spinner("🔧 جاري التدريب..."):
-                status.text("⚙️ تحليل البيانات...")
-                progress.progress(20)
-                status.text("🤖 تدريب RandomForest...")
-                progress.progress(50)
-
-                train_results = train_custom_model(
-                    df_train,
-                    label_col    = train_label,
-                    benign_label = str(train_benign),
-                    max_rows     = int(max_rows))
-
-                progress.progress(90)
-
-                if train_results["success"]:
-                    st.session_state["custom_model"] = {
-                        "model"   : train_results["model"],
-                        "scaler"  : train_results["scaler"],
-                        "le"      : train_results["le"],
-                        "features": train_results["features"],
-                    }
-                    st.session_state["custom_meta"] = {
-                        "classes"     : train_results["classes"],
-                        "n_classes"   : train_results["n_classes"],
-                        "n_samples"   : train_results["n_samples"],
-                        "features"    : train_results["features"],
-                        "metrics"     : train_results["metrics"],
-                        "label_col"   : train_label,
-                        "benign_label": str(train_benign),
-                    }
-
-                    progress.progress(100)
-                    status.text("✅ اكتمل!")
-
-                    st.markdown("## 🏆 نتائج التدريب")
-                    m = train_results["metrics"]
-                    rc1,rc2,rc3 = st.columns(3)
-                    for col, (name, val, hi, lo) in zip(
-                            [rc1,rc2,rc3], [
-                                ("Accuracy",
-                                 m["accuracy"]*100,90,80),
-                                ("Weighted F1",
-                                 m["weighted_f1"]*100,90,80),
-                                ("Macro F1",
-                                 m["macro_f1"]*100,80,60),
-                            ]):
-                        with col:
-                            cl = ("status-excellent"
-                                  if val>hi else
-                                  "status-good" if val>lo
-                                  else "status-warning")
-                            st.markdown(
-                                f'<p class="metric-value {cl}">'
-                                f'{val:.2f}%</p>'
-                                f'<p class="metric-label">'
-                                f'{name}</p>',
-                                unsafe_allow_html=True)
-
-                    ic1,ic2,ic3 = st.columns(3)
-                    with ic1:
-                        st.metric("Classes",
-                                  train_results["n_classes"])
-                    with ic2:
-                        st.metric("Features",
-                                  len(train_results["features"]))
-                    with ic3:
-                        st.metric("Samples",
-                                  f"{train_results['n_samples']:,}")
-
-                    st.code(m["report"])
-                    st.success(
-                        "✅ انتقل لـ **🔍 تحليل الشبكة** "
-                        "وارفع ملفاً للتحليل.")
-                else:
-                    progress.progress(0)
-                    st.error(train_results["message"])
