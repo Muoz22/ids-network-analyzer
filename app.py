@@ -868,61 +868,49 @@ with tab3:
 with tab4:
     st.markdown("## 📋 عن المشروع")
 
-    col1, col2 = st.columns(2)
-    with col1:
-        st.markdown("""
-### 🎯 الهدف
-نظام كشف هجمات شبكية يعمل على **أي داتاست**
-بضغطة زر واحدة — بدون تعديل يدوي.
+    st.markdown("""
+### 🛡️ AI Agents IDS — نظام كشف التسلل الشبكي
 
-### 📊 الداتاسيت المدعومة
-- **TON-IoT** — 10 أنواع هجمات
-- **CIC-IoT-2023** — 34 نوع هجوم
-- **UNSW-NB15** — 9 أنواع هجمات
-- **Bot-IoT** — 5 categories
-- **CICIDS2017** — 14 نوع هجوم
-- **أي CSV** — تدريب تلقائي
+نظام ذكي لتحليل حركة مرور الشبكة واكتشاف الهجمات وتصنيفها تلقائياً،
+مبني على ستة عملاء ذكاء اصطناعي (Agents) يتعاونون فيما بينهم لتحقيق
+تحليل شامل ودقيق لأي داتاست شبكية — بضغطة زر واحدة.
 
-### ⚡ الأداء
-- Accuracy: **93-99%**
-- Macro F1: **80-92%**
-        """)
-    with col2:
-        st.markdown("""
-### 🛠️ التقنيات
-- **FT-Transformer** — Tabular Transformer
-- **Boruta + SHAP** — Feature Selection
-- **SMOTE-ENN** — Class Balancing
-- **Autoencoder + IForest** — Anomaly Detection
-- **ONNX Runtime** — Fast Inference
-- **RandomForest** — Auto Custom Training
-- **Smart Detection** — Auto label detection
-- **Persistent Memory** — تحسين مستمر
+---
 
-### 📞 التواصل
-- [🐙 GitHub](https://github.com/Muoz22/ids-network-analyzer)
-- [🎓 Google Scholar](https://scholar.google.com/citations?user=J35vcAIAAAAJ&hl=en)
-- [📄 ResearchGate](https://www.researchgate.net/profile/Muaadh-Alsoufi?ev=hdr_xprf)
-        """)
+**AI Agents IDS** is an intelligent network traffic analysis system that
+automatically detects and classifies cyberattacks using six cooperating
+AI Agents. Each agent plays a specific role in the pipeline, working
+together to deliver accurate, explainable results on any network dataset
+without manual configuration.
 
-    if models_global and "meta" in models_global:
-        meta = models_global["meta"]
-        st.markdown("---")
-        st.markdown("### 🔍 معلومات النموذج")
-        info_df = pd.DataFrame({
-            "المعلومة": [
-                "النوع","Features","Classes",
-                "Session #","Trained at"],
-            "القيمة": [
-                "FT-Transformer Universal",
-                str(meta.get('n_features', 0)),
-                str(meta.get('n_classes', 0)),
-                str(meta.get('session', 0)),
-                meta.get('trained_at', '')[:10],
-            ]
-        })
-        st.dataframe(info_df, use_container_width=True,
-                     hide_index=True)
+---
+
+### 🤖 الـ Agents وأدوارهم
+
+**Agent 1 — Universal Preprocessor**
+يستقبل أي ملف CSV ويُنظّفه تلقائياً، يحذف الأعمدة غير المفيدة ويوازن البيانات.
+
+**Agent 2 — Smart Feature Selector**
+يختار أهم الـ features من بين عشرات الأعمدة بشكل ذكي وموثوق.
+
+**Agent 3 — Behavioral Anomaly Detector**
+يتعلم شكل الحركة الطبيعية ويكتشف أي انحراف عنها كسلوك مشبوه.
+
+**Agent 4 — Classifier**
+يصنّف الحركة المشبوهة إلى أنواع هجمات محددة بدقة عالية.
+
+**Agent 5 — Adaptive Learner**
+يراقب التغييرات في أنماط البيانات ويتكيف معها تلقائياً.
+
+**Agent 6 — Decision Maker**
+يجمع نتائج جميع الـ Agents ويصدر قرار نهائي: سماح، حجب، أو عزل.
+
+---
+
+### 🧠 الذاكرة المستمرة
+النظام يحتفظ بذاكرة بين الجلسات — يتعلم من كل تحليل ويُحسّن أداءه
+باستمرار دون الحاجة لإعادة التدريب من الصفر.
+    """)
 
     st.markdown("---")
     footer_html = (
