@@ -43,7 +43,11 @@ st.markdown("""
 st.markdown("""
 <div class="main-header">
     <h1>🛡️ AI Agents IDS</h1>
-    <p>Network Intrusion Detection System — Powered by 6 AI Agents | Muaadh A.Alsoufi</p>
+    <p>Network Intrusion Detection System — Powered by 6 AI Agents | v3 Universal</p>
+    <p style="color:#666;font-size:0.8rem;margin-top:0.5rem;">
+    © 2025 Muaz Al-Soufi |
+    <a href="https://github.com/Muoz22/ids-network-analyzer"
+    style="color:#00d4ff;">GitHub</a></p>
 </div>
 """, unsafe_allow_html=True)
 
