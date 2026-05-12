@@ -203,23 +203,18 @@ def is_compatible(df, model_features):
 
 def auto_train_if_needed(df, use_lc, use_bl,
                          status_placeholder):
-    """
-    """
     from inference import train_custom_model
 
-    # ── هل النموذج الأصلي متوافق؟ ─────────────────────────
     models, err = load_models_cached(version="v3")
     if not err and models:
-        orig_feats  = models.get("features", [])
+        orig_feats      = models.get("features", [])
         compatible, pct = is_compatible(df, orig_feats)
         if compatible:
-            # احذف أي نموذج مخصص قديم
             if "_auto_custom_model" in st.session_state:
                 del st.session_state["_auto_custom_model"]
                 del st.session_state["_auto_custom_meta"]
             return False
 
-    # ── لا يوجد نموذج متوافق → درّب ضمنياً ───────────────
     if not use_lc or use_lc not in df.columns:
         return False
 
@@ -268,7 +263,7 @@ with st.sidebar:
     default_lc = "type"
     default_bl = "normal"
     if models_global and "meta" in models_global:
-        meta = models_global["meta"]
+        meta       = models_global["meta"]
         default_lc = meta.get("label_col", "type")
         default_bl = meta.get("benign_label", "normal")
 
@@ -283,7 +278,6 @@ with st.sidebar:
     st.markdown("---")
     st.markdown("### 📊 النموذج")
 
-    # الـ sidebar يعرض النموذج الأصلي فقط
     if models_global and "meta" in models_global:
         meta = models_global["meta"]
         st.success("✅ النموذج الأصلي (TON-IoT)")
@@ -306,10 +300,15 @@ with st.sidebar:
     st.markdown("---")
     st.markdown("### 🔗 روابط")
     st.markdown(
-        "[GitHub](https://github.com/Muoz22/ids-network-analyzer)")
+        "[🐙 GitHub](https://github.com/Muoz22/"
+        "ids-network-analyzer)  \n"
+        "[🎓 Google Scholar](https://scholar.google.com/"
+        "citations?user=J35vcAIAAAAJ&hl=en)  \n"
+        "[📄 ResearchGate](https://www.researchgate.net/"
+        "profile/Muaadh-Alsoufi?ev=hdr_xprf)")
 
 
-# ── 4 Tabs فقط (بدون Train Custom Model) ─────────────────────
+# ── 4 Tabs ────────────────────────────────────────────────────
 tab1, tab2, tab3, tab4 = st.tabs([
     "🔍 تحليل الشبكة",
     "📊 تقرير تفصيلي",
@@ -369,20 +368,25 @@ with tab1:
             if detection["label_col"]:
                 conf_color = (
                     "🟢" if detection["confidence"] >= 90
-                    else "🟡" if detection["confidence"] >= 70
+                    else "🟡"
+                    if detection["confidence"] >= 70
                     else "🔴")
                 st.success(
                     f"{conf_color} **اكتشاف تلقائي** "
                     f"(ثقة {detection['confidence']}%)\n\n"
-                    f"**النوع:** {detection['problem_type']}\n\n"
-                    f"**Label:** `{detection['label_col']}`\n\n"
-                    f"**Benign:** `{detection['benign_label']}`\n\n"
-                    f"**Classes:** {detection['n_classes']}\n\n"
+                    f"**النوع:** "
+                    f"{detection['problem_type']}\n\n"
+                    f"**Label:** "
+                    f"`{detection['label_col']}`\n\n"
+                    f"**Benign:** "
+                    f"`{detection['benign_label']}`\n\n"
+                    f"**Classes:** "
+                    f"{detection['n_classes']}\n\n"
                     f"**السبب:** {detection['reason']}")
             else:
                 st.warning(
-                    "⚠️ لم يُعثر على عمود label تلقائياً\n\n"
-                    "اختر **Manual** وأدخل المعلومات يدوياً")
+                    "⚠️ لم يُعثر على عمود label\n\n"
+                    "اختر **Manual** وأدخل يدوياً")
 
         with dc2:
             analysis_mode = st.radio(
@@ -405,7 +409,8 @@ with tab1:
                     key="manual_lc_tab1")
             with mc2:
                 if manual_lc in df.columns:
-                    vals = df[manual_lc].unique().tolist()
+                    vals      = df[manual_lc].unique(
+                        ).tolist()
                     manual_bl = st.selectbox(
                         "اختر الكلاس الطبيعي:",
                         options=[str(v) for v in vals],
@@ -423,7 +428,6 @@ with tab1:
                 df, analysis_mode, detection,
                 label_col, benign_label)
 
-        # ── عرض الاختيار النهائي ──────────────────────────
         st.markdown(
             f"**الاختيار النهائي:** "
             f"Label=`{use_lc}` | "
@@ -451,7 +455,6 @@ with tab1:
                     run_inference_custom,
                     make_plots)
 
-                # ── فحص التوافق + تدريب تلقائي ───────────
                 status.text("🔍 فحص التوافق...")
                 progress.progress(10)
 
@@ -462,9 +465,7 @@ with tab1:
                 status.text("🤖 تشغيل التحليل...")
                 progress.progress(50)
 
-                # ── اختر النموذج المناسب ──────────────────
                 if "_auto_custom_model" in st.session_state:
-                    # نموذج مخصص تدرّب تلقائياً
                     auto_cm = st.session_state[
                         "_auto_custom_model"]
                     auto_lc = st.session_state[
@@ -475,9 +476,9 @@ with tab1:
                         df, auto_cm,
                         auto_lc, auto_bl,
                         ft_unk_thr=threshold)
-                    model_used = "🔧 Auto-trained (RandomForest)"
+                    model_used = \
+                        "🔧 Auto-trained (RandomForest)"
                 else:
-                    # النموذج الأصلي
                     models, err = load_models_cached(
                         version="v3")
                     if err:
@@ -487,7 +488,8 @@ with tab1:
                         df, models,
                         use_lc, use_bl,
                         ft_unk_thr=threshold)
-                    model_used = "🔵 Original (FT-Transformer)"
+                    model_used = \
+                        "🔵 Original (FT-Transformer)"
 
                 status.text("📊 إنتاج الرسوم...")
                 progress.progress(80)
@@ -518,7 +520,6 @@ with tab1:
                 st.session_state["results"]    = results
                 st.session_state["plot_bytes"] = plot_bytes
 
-                # ── إحصاءات ───────────────────────────────
                 st.markdown("---")
                 st.markdown("## 🏆 نتائج التحليل")
 
@@ -552,7 +553,8 @@ with tab1:
                                 ("Accuracy",
                                  m["accuracy"]*100,97,93),
                                 ("Weighted F1",
-                                 m["weighted_f1"]*100,95,90),
+                                 m["weighted_f1"]*100,
+                                 95,90),
                                 ("Macro F1",
                                  m["macro_f1"]*100,80,60),
                             ]):
@@ -562,8 +564,8 @@ with tab1:
                                   "status-good" if val>lo
                                   else "status-warning")
                             st.markdown(
-                                f'<p class="metric-value {cl}">'
-                                f'{val:.2f}%</p>'
+                                f'<p class="metric-value'
+                                f' {cl}">{val:.2f}%</p>'
                                 f'<p class="metric-label">'
                                 f'{name}</p>',
                                 unsafe_allow_html=True)
@@ -571,7 +573,8 @@ with tab1:
                 if results["atk_counts"]:
                     st.markdown("### 🔴 أنواع الهجمات")
                     atk_df = pd.DataFrame(
-                        results["atk_counts"].most_common(20),
+                        results["atk_counts"].most_common(
+                            20),
                         columns=["نوع الهجوم","العدد"])
                     atk_df["النسبة %"] = (
                         atk_df["العدد"]/total*100
@@ -587,27 +590,30 @@ with tab1:
                                 plot_bytes[i:i+2]):
                             with cols[j]:
                                 st.markdown(f"**{title}**")
-                                st.image(img,
-                                         use_column_width=True)
+                                st.image(
+                                    img,
+                                    use_column_width=True)
 
                 if "report" in m:
                     with st.expander(
-                            "📋 تقرير Classification كامل"):
+                            "📋 تقرير Classification"):
                         st.code(m["report"])
 
                 with st.expander("🔍 تفاصيل المعالجة"):
-                    st.write(f"**النموذج:** {model_used}")
+                    st.write(
+                        f"**النموذج:** {model_used}")
                     if trained_new:
                         st.info(
-                            "✅ تم تدريب نموذج تلقائياً "
-                            "لهذه الداتاست")
-                    st.write(f"**وقت التنفيذ:** "
-                             f"{results['elapsed_sec']}s")
+                            "✅ تم تدريب نموذج تلقائياً")
+                    st.write(
+                        f"**وقت التنفيذ:** "
+                        f"{results['elapsed_sec']}s")
                     st.write(f"**Label:** `{use_lc}`")
                     st.write(f"**Benign:** `{use_bl}`")
                     st.write(f"**Type:** `{use_type}`")
-                    st.write(f"**Features مطابقة:** "
-                             f"{results['matched_feats']}")
+                    st.write(
+                        f"**Features مطابقة:** "
+                        f"{results['matched_feats']}")
                     if results["missing_feats"]:
                         st.warning(
                             f"**مفقودة:** "
@@ -730,7 +736,8 @@ with tab2:
 
             if "report" in m:
                 st.markdown("---")
-                st.markdown("### 📋 Classification Report")
+                st.markdown(
+                    "### 📋 Classification Report")
                 st.code(m["report"])
 
         st.markdown("---")
@@ -752,7 +759,8 @@ with tab2:
         st.markdown("---")
         st.markdown("### 🗂️ Summary Dashboard")
         dash_imgs = [(t,img) for t,img in plot_bytes
-                     if "Dashboard" in t or "Summary" in t]
+                     if "Dashboard" in t or
+                     "Summary" in t]
         if dash_imgs:
             st.image(dash_imgs[0][1],
                      use_column_width=True)
@@ -811,14 +819,13 @@ with tab3:
     agents = [
         ("1","Universal Preprocessor","#2ecc71",
          "يقرأ أي CSV ويُنظّفه تلقائياً — يكتشف timestamps "
-         "وIPs وdata leakage بالمنطق لا بالأسماء. "
-         "يقسم البيانات لـ Train/Test ثم SMOTE على Train فقط."),
+         "وIPs وdata leakage بالمنطق لا بالأسماء."),
         ("2","Smart Feature Selector","#3498db",
          "Boruta + XGBoost + SHAP يختار أهم الـ features. "
          "من 46 عمود يختار 10 فقط."),
         ("3","Behavioral Anomaly Detector","#9b59b6",
-         "Autoencoder يتعلم شكل الـ normal مع Data Augmentation "
-         "+ IsolationForest."),
+         "Autoencoder يتعلم شكل الـ normal مع "
+         "Data Augmentation + IsolationForest."),
         ("4","FT-Transformer Classifier","#e74c3c",
          "يصنّف 10-34 نوع هجوم بدقة 93-98%. "
          "إذا كانت الداتاست جديدة يُستبدل بـ RandomForest "
@@ -827,7 +834,8 @@ with tab3:
          "KS Test يكتشف Concept Drift. "
          "EWC يحمي الأوزان. Reservoir Sampling للتنوع."),
         ("6","Decision Maker","#1abc9c",
-         "يجمع نتائج الـ Agents: ALLOW / BLOCK / QUARANTINE."),
+         "يجمع نتائج الـ Agents: "
+         "ALLOW / BLOCK / QUARANTINE."),
     ]
 
     for num, name, color, desc in agents:
@@ -883,41 +891,39 @@ with tab4:
     col1, col2 = st.columns(2)
     with col1:
         st.markdown("""
-        ### 🎯 الهدف
-        نظام كشف هجمات شبكية يعمل على **أي داتاست**
-        بضغطة زر واحدة — بدون تعديل يدوي.
+### 🎯 الهدف
+نظام كشف هجمات شبكية يعمل على **أي داتاست**
+بضغطة زر واحدة — بدون تعديل يدوي.
 
-        ### 📊 الداتاسيت المدعومة
-        - **TON-IoT** — 10 أنواع هجمات
-        - **CIC-IoT-2023** — 34 نوع هجوم
-        - **UNSW-NB15** — 9 أنواع هجمات
-        - **Bot-IoT** — 5 categories
-        - **CICIDS2017** — 14 نوع هجوم
-        - **أي CSV** — تدريب تلقائي
+### 📊 الداتاسيت المدعومة
+- **TON-IoT** — 10 أنواع هجمات
+- **CIC-IoT-2023** — 34 نوع هجوم
+- **UNSW-NB15** — 9 أنواع هجمات
+- **Bot-IoT** — 5 categories
+- **CICIDS2017** — 14 نوع هجوم
+- **أي CSV** — تدريب تلقائي
 
-        ### ⚡ الأداء
-        - Accuracy: **93-99%**
-        - Macro F1: **80-92%**
+### ⚡ الأداء
+- Accuracy: **93-99%**
+- Macro F1: **80-92%**
         """)
     with col2:
         st.markdown("""
-        ### 🛠️ التقنيات
-        - **FT-Transformer** — Tabular Transformer
-        - **Boruta + SHAP** — Feature Selection
-        - **SMOTE-ENN** — Class Balancing
-        - **Autoencoder + IForest** — Anomaly Detection
-        - **ONNX Runtime** — Fast Inference
-        - **RandomForest** — Auto Custom Training
-        - **Smart Detection** — Auto label detection
-        - **Persistent Memory** — تحسين مستمر
+### 🛠️ التقنيات
+- **FT-Transformer** — Tabular Transformer
+- **Boruta + SHAP** — Feature Selection
+- **SMOTE-ENN** — Class Balancing
+- **Autoencoder + IForest** — Anomaly Detection
+- **ONNX Runtime** — Fast Inference
+- **RandomForest** — Auto Custom Training
+- **Smart Detection** — Auto label detection
+- **Persistent Memory** — تحسين مستمر
 
-        ### 📞 التواصل
-
-        - [🐙 GitHub](https://github.com/Muoz22/ids-network-analyzer)
-
-        - [🎓 Google Scholar](https://scholar.google.com/citations?user=J35vcAIAAAAJ&hl=en)
-        - [🐙 Researchgate](https://www.researchgate.net/profile/Muaadh-Alsoufi?ev=hdr_xprf)
-   
+### 📞 التواصل
+- [🐙 GitHub](https://github.com/Muoz22/ids-network-analyzer)
+- [🎓 Google Scholar](https://scholar.google.com/citations?user=J35vcAIAAAAJ&hl=en)
+- [📄 ResearchGate](https://www.researchgate.net/profile/Muaadh-Alsoufi?ev=hdr_xprf)
+        """)
 
     if models_global and "meta" in models_global:
         meta = models_global["meta"]
@@ -943,10 +949,10 @@ with tab4:
                      hide_index=True)
 
     st.markdown("---")
-    st.markdown("---")
     footer_html = (
         '<div style="text-align:center;padding:1rem;'
-        'background:linear-gradient(135deg,#1a1a2e,#0f3460);'
+        'background:linear-gradient('
+        '135deg,#1a1a2e,#0f3460);'
         'border-radius:10px;">'
         '<p style="color:#00d4ff;font-size:1.2rem;'
         'font-weight:bold;margin:0;">'
@@ -957,7 +963,15 @@ with tab4:
         '<p style="color:#a0aec0;margin:0.3rem 0;">'
         '<a href="https://github.com/Muoz22/'
         'ids-network-analyzer" style="color:#00d4ff;">'
-        'github.com/Muoz22/ids-network-analyzer</a></p>'
+        'github.com/Muoz22/ids-network-analyzer</a>'
+        ' &nbsp;|&nbsp; '
+        '<a href="https://scholar.google.com/citations'
+        '?user=J35vcAIAAAAJ&hl=en" style="color:#00d4ff;">'
+        'Google Scholar</a>'
+        ' &nbsp;|&nbsp; '
+        '<a href="https://www.researchgate.net/profile/'
+        'Muaadh-Alsoufi" style="color:#00d4ff;">'
+        'ResearchGate</a></p>'
         '<p style="color:#666;font-size:0.8rem;'
         'margin:0.3rem 0;">'
         'Built with ❤️ using Streamlit · ONNX Runtime · '
