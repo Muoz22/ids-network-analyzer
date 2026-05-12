@@ -43,7 +43,7 @@ st.markdown("""
 st.markdown("""
 <div class="main-header">
     <h1>🛡️ AI Agents IDS</h1>
-    <p>Network Intrusion Detection System — Powered by 6 AI Agents | v3 Universal</p>
+    <p>Network Intrusion Detection System — Powered by 6 AI Agents | Muaadh A.Alsoufi</p>
 </div>
 """, unsafe_allow_html=True)
 
@@ -200,8 +200,6 @@ def is_compatible(df, model_features):
 def auto_train_if_needed(df, use_lc, use_bl,
                          status_placeholder):
     """
-    يدرّب نموذجاً تلقائياً ضمنياً
-    إذا كانت الداتاست غير متوافقة.
     """
     from inference import train_custom_model
 
