@@ -37,3 +37,11 @@
   "scaler_features": 10,
   "missing_in_raw": []
 }
+{
+  "author"     : "Muaz Al-Soufi",
+  "github"     : "https://github.com/Muoz22",
+  "project"    : "AI Agents IDS v3 Universal",
+  "license"    : "MIT — Attribution Required",
+  "created_at" : "2025",
+  "description": "Network Intrusion Detection System powered by 6 AI Agents"
+}
