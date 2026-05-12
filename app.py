@@ -912,8 +912,12 @@ with tab4:
         - **Persistent Memory** — تحسين مستمر
 
         ### 📞 التواصل
-        - [GitHub](https://github.com/Muoz22/ids-network-analyzer)
-        """)
+
+        - [🐙 GitHub](https://github.com/Muoz22/ids-network-analyzer)
+
+        - [🎓 Google Scholar](https://scholar.google.com/citations?user=J35vcAIAAAAJ&hl=en)
+        - [🐙 Researchgate](https://www.researchgate.net/profile/Muaadh-Alsoufi?ev=hdr_xprf)
+   
 
     if models_global and "meta" in models_global:
         meta = models_global["meta"]
