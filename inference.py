@@ -5,7 +5,7 @@
 import pickle, json, os
 import numpy as np
 import pandas as pd
-from collections import Counter
+from collections import Counter, defaultdict
 import matplotlib.pyplot as plt
 import matplotlib.gridspec as gridspec
 import seaborn as sns
@@ -262,7 +262,7 @@ def make_plots(results, benign_label, out_dir="plots/"):
         "figure.dpi": 120, "font.size": 11,
         "figure.facecolor": "white"})
 
-    # ── 1. Decision Pie ───────────────────────────────────────
+    # ── 1. Decision Pie ───────────────────────────────────
     try:
         fig, ax = plt.subplots(figsize=(7, 6))
         ax.pie(
@@ -281,7 +281,7 @@ def make_plots(results, benign_label, out_dir="plots/"):
     except Exception:
         pass
 
-    # ── 2. Attack Bar ─────────────────────────────────────────
+    # ── 2. Attack Bar ─────────────────────────────────────
     try:
         if results["atk_counts"]:
             fig, ax = plt.subplots(figsize=(10, 6))
@@ -294,7 +294,8 @@ def make_plots(results, benign_label, out_dir="plots/"):
             ax.barh(nms, vals, color=cols, alpha=0.85)
             for i, v in enumerate(vals):
                 ax.text(v+max(vals)*0.01, i,
-                        f"{v:,}", va="center", fontsize=9)
+                        f"{v:,}", va="center",
+                        fontsize=9)
             ax.set_xlabel("Count")
             ax.set_title("Top Attack Types",
                          fontweight="bold")
@@ -307,7 +308,7 @@ def make_plots(results, benign_label, out_dir="plots/"):
     except Exception:
         pass
 
-    # ── 3. Confidence ─────────────────────────────────────────
+    # ── 3. Confidence ─────────────────────────────────────
     try:
         fig, axes = plt.subplots(1, 2, figsize=(14, 5))
         n = min(3000, len(y_conf))
@@ -323,7 +324,6 @@ def make_plots(results, benign_label, out_dir="plots/"):
         axes[0].set_title("Confidence Timeline",
                           fontweight="bold")
         axes[0].legend(); axes[0].grid(alpha=0.3)
-
         axes[1].hist(y_conf[~y_unk], bins=50,
                      color="#3498db", alpha=0.7,
                      label="Known", density=True)
@@ -346,7 +346,7 @@ def make_plots(results, benign_label, out_dir="plots/"):
     except Exception:
         pass
 
-    # ── 4. Confusion Matrix ───────────────────────────────────
+    # ── 4. Confusion Matrix ───────────────────────────────
     if "cm_true" in m:
         try:
             y_true  = m["cm_true"]
@@ -355,7 +355,8 @@ def make_plots(results, benign_label, out_dir="plots/"):
             cm = confusion_matrix(
                 y_true, y_pred, labels=present)
             sz = max(7, len(present))
-            fig, ax = plt.subplots(figsize=(sz+1, sz))
+            fig, ax = plt.subplots(
+                figsize=(sz+1, sz))
             sns.heatmap(
                 cm, annot=True, fmt="d",
                 cmap="Blues",
@@ -375,7 +376,7 @@ def make_plots(results, benign_label, out_dir="plots/"):
         except Exception:
             pass
 
-    # ── 5. Per-Class F1 ───────────────────────────────────────
+    # ── 5. Per-Class F1 ───────────────────────────────────
     if "cm_true" in m:
         try:
             y_true = m["cm_true"]
@@ -410,7 +411,7 @@ def make_plots(results, benign_label, out_dir="plots/"):
         except Exception:
             pass
 
-    # ── 6. Severity Distribution ──────────────────────────────
+    # ── 6. Severity Distribution ──────────────────────────
     try:
         fig, ax = plt.subplots(figsize=(8, 6))
         high_sev = ["ddos","dos","ransomware",
@@ -437,7 +438,7 @@ def make_plots(results, benign_label, out_dir="plots/"):
     except Exception:
         pass
 
-    # ── 7. Class Distribution ─────────────────────────────────
+    # ── 7. Class Distribution ─────────────────────────────
     try:
         class_counts = Counter(y_pred)
         top_classes  = [x[0] for x in
@@ -468,7 +469,7 @@ def make_plots(results, benign_label, out_dir="plots/"):
     except Exception:
         pass
 
-    # ── 8. ROC & PR Curves ────────────────────────────────────
+    # ── 8. ROC & PR Curves ────────────────────────────────
     if "y_true" in m:
         try:
             y_true   = m["y_true"]
@@ -476,10 +477,8 @@ def make_plots(results, benign_label, out_dir="plots/"):
                 [0 if y==benign_label else 1
                  for y in y_true])
             y_scores = 1 - y_conf
-
             fpr, tpr, _ = roc_curve(y_bin, y_scores)
             roc_auc     = auc(fpr, tpr)
-
             fig, axes = plt.subplots(1, 2,
                                      figsize=(14, 5))
             axes[0].plot(fpr, tpr, color="#3498db",
@@ -492,7 +491,6 @@ def make_plots(results, benign_label, out_dir="plots/"):
                               fontweight="bold")
             axes[0].legend()
             axes[0].grid(alpha=0.3)
-
             prec, rec, _ = precision_recall_curve(
                 y_bin, y_scores)
             pr_auc = auc(rec, prec)
@@ -506,7 +504,6 @@ def make_plots(results, benign_label, out_dir="plots/"):
                 fontweight="bold")
             axes[1].legend()
             axes[1].grid(alpha=0.3)
-
             plt.suptitle("ROC & PR Curves",
                          fontweight="bold")
             plt.tight_layout()
@@ -517,12 +514,11 @@ def make_plots(results, benign_label, out_dir="plots/"):
         except Exception:
             pass
 
-    # ── 9. Summary Dashboard ──────────────────────────────────
+    # ── 9. Summary Dashboard ──────────────────────────────
     try:
         fig = plt.figure(figsize=(18, 10))
         gs  = gridspec.GridSpec(2, 3, figure=fig,
                                 hspace=0.4, wspace=0.35)
-
         ax1 = fig.add_subplot(gs[0, 0])
         ax1.pie(
             [max(s,1) for s in [benign, atks, unk]],
@@ -530,7 +526,6 @@ def make_plots(results, benign_label, out_dir="plots/"):
             colors=["#2ecc71","#e74c3c","#f39c12"],
             autopct="%1.1f%%", startangle=140)
         ax1.set_title("Decisions", fontweight="bold")
-
         ax2 = fig.add_subplot(gs[0, 1])
         ax2.hist(y_conf, bins=50,
                  color="#9b59b6", alpha=0.7,
@@ -540,7 +535,6 @@ def make_plots(results, benign_label, out_dir="plots/"):
                       fontweight="bold")
         ax2.set_xlabel("Confidence")
         ax2.grid(alpha=0.3)
-
         ax3 = fig.add_subplot(gs[0, 2])
         if results["atk_counts"]:
             top5 = results["atk_counts"].most_common(5)
@@ -551,7 +545,6 @@ def make_plots(results, benign_label, out_dir="plots/"):
             ax3.set_title("Top 5 Attacks",
                           fontweight="bold")
             ax3.grid(axis="x", alpha=0.3)
-
         if "cm_true" in m:
             ax4  = fig.add_subplot(gs[1, :])
             y_tr = m["cm_true"]
@@ -574,7 +567,6 @@ def make_plots(results, benign_label, out_dir="plots/"):
             ax4.set_title("Per-Class F1",
                           fontweight="bold")
             ax4.grid(axis="y", alpha=0.3)
-
         acc_str = (
             f"Acc={m['accuracy']*100:.1f}%  "
             f"W-F1={m['weighted_f1']*100:.1f}%  "
@@ -590,11 +582,10 @@ def make_plots(results, benign_label, out_dir="plots/"):
     except Exception:
         pass
 
-    # ── 10. Drift Analysis ────────────────────────────────────
+    # ── 10. Drift Analysis ────────────────────────────────
     try:
         from scipy.stats import ks_2samp
         fig, axes = plt.subplots(1, 2, figsize=(14, 5))
-
         ref = np.random.RandomState(42).normal(
             0.8, 0.1, len(y_conf))
         axes[0].hist(y_conf, bins=40,
@@ -611,14 +602,12 @@ def make_plots(results, benign_label, out_dir="plots/"):
             fontweight="bold")
         axes[0].legend()
         axes[0].grid(alpha=0.3)
-
         stat, p_val = ks_2samp(y_conf, ref)
         drifted     = p_val < 0.05
         drift_color = "#e74c3c" if drifted \
             else "#2ecc71"
         drift_text  = "DRIFT DETECTED ⚠️" if drifted \
             else "Stable ✅"
-
         axes[1].bar(
             ["KS Statistic", "P-Value"],
             [stat, p_val],
@@ -640,7 +629,6 @@ def make_plots(results, benign_label, out_dir="plots/"):
             ha="center", va="center",
             fontsize=14, fontweight="bold",
             color=drift_color)
-
         plt.suptitle("Agent 5 — Drift Analysis",
                      fontweight="bold")
         plt.tight_layout()
@@ -680,12 +668,10 @@ def train_custom_model(df, label_col, benign_label,
     }
 
     try:
-        # ── Sample ────────────────────────────────────────────
         if len(df) > max_rows:
             df = df.sample(max_rows, random_state=42)
         results["n_samples"] = len(df)
 
-        # ── Auto Exclude ──────────────────────────────────────
         df_clean, avail, removed = auto_exclude(
             df, label_col, benign_label)
         results["removed_cols"] = removed
@@ -695,19 +681,16 @@ def train_custom_model(df, label_col, benign_label,
                 "❌ لا توجد features صالحة بعد الفلترة"
             return results
 
-        # ── Encode Labels ─────────────────────────────────────
         le = LabelEncoder()
         y  = le.fit_transform(df[label_col].values)
         results["classes"]   = list(le.classes_)
         results["n_classes"] = len(le.classes_)
 
-        # ── Features + Scale ──────────────────────────────────
         X      = df_clean[avail].values.astype(np.float32)
         scaler = RobustScaler()
         X_sc   = scaler.fit_transform(X)
         results["features"] = avail
 
-        # ── احذف الكلاسات النادرة (أقل من 2) ─────────────────
         counts    = Counter(y)
         valid_idx = np.array(
             [i for i, yi in enumerate(y)
@@ -721,12 +704,6 @@ def train_custom_model(df, label_col, benign_label,
         X_sc_f = X_sc[valid_idx]
         y_f    = y[valid_idx]
 
-        removed_rare = len(y) - len(y_f)
-        if removed_rare > 0:
-            print(f"⚠️ Removed {removed_rare} "
-                  f"rare samples")
-
-        # ── Split ─────────────────────────────────────────────
         counts_f = Counter(y_f)
         stratify = y_f if min(
             counts_f.values()) >= 2 else None
@@ -737,7 +714,6 @@ def train_custom_model(df, label_col, benign_label,
             random_state=42,
             stratify=stratify)
 
-        # ── Train RandomForest ────────────────────────────────
         model = RandomForestClassifier(
             n_estimators = 100,
             max_depth    = 15,
@@ -747,7 +723,6 @@ def train_custom_model(df, label_col, benign_label,
         )
         model.fit(X_tr, y_tr)
 
-        # ── Evaluate ──────────────────────────────────────────
         y_pred       = model.predict(X_te)
         y_pred_names = le.inverse_transform(y_pred)
         y_true_names = le.inverse_transform(y_te)
@@ -868,11 +843,14 @@ def run_inference_custom(df, custom, label_col,
         "X_final"      : X_sc,
         "ft_unk_thr"   : ft_unk_thr,
     }
-    def make_explainability_plots(results, models,
-                               out_dir="plots/"):
-    """
-    رسوم قابلية التفسير (Explainability)
-    """
+
+
+# ================================================================
+# Explainability Plots
+# ================================================================
+
+def make_explainability_plots(results, models,
+                              out_dir="plots/"):
     os.makedirs(out_dir, exist_ok=True)
     paths = []
 
@@ -880,30 +858,31 @@ def run_inference_custom(df, custom, label_col,
     y_probs = results["y_probs"]
     y_conf  = results["y_conf"]
 
-    # ── 1. Feature Importance (من الـ weights) ────────────
+    # ── 1. Feature Importance ─────────────────────────────
     try:
         feat_names = (
             models.get("features", [])
-            if models else
-            [f"F{i}" for i in range(
-                results["X_final"].shape[1])])
-
+            if models else [])
         X = results["X_final"]
-        # حساب variance لكل feature كمؤشر أهمية
+
+        if len(feat_names) == 0:
+            feat_names = [f"F{i}"
+                          for i in range(X.shape[1])]
+
         importance = np.var(X, axis=0)
         if len(importance) == len(feat_names):
-            idx = np.argsort(importance)[::-1]
-            top_n = min(10, len(feat_names))
-            top_feats = [feat_names[i] for i in idx[:top_n]]
-            top_vals  = importance[idx[:top_n]]
-
+            idx     = np.argsort(importance)[::-1]
+            top_n   = min(10, len(feat_names))
+            top_f   = [feat_names[i]
+                       for i in idx[:top_n]]
+            top_v   = importance[idx[:top_n]]
             fig, ax = plt.subplots(figsize=(10, 6))
-            colors = plt.cm.Blues_r(
+            colors  = plt.cm.Blues_r(
                 np.linspace(0.3, 0.9, top_n))
-            ax.barh(top_feats[::-1],
-                    top_vals[::-1],
+            ax.barh(top_f[::-1], top_v[::-1],
                     color=colors[::-1], alpha=0.85)
-            ax.set_xlabel("Variance (Importance Proxy)")
+            ax.set_xlabel(
+                "Variance (Importance Proxy)")
             ax.set_title(
                 "Feature Importance — Top Features",
                 fontweight="bold")
@@ -919,7 +898,6 @@ def run_inference_custom(df, custom, label_col,
 
     # ── 2. Confidence per Class ───────────────────────────
     try:
-        from collections import defaultdict
         class_conf = defaultdict(list)
         for pred, conf in zip(y_pred, y_conf):
             class_conf[pred].append(conf)
@@ -931,14 +909,14 @@ def run_inference_custom(df, custom, label_col,
                      for c in cls_names]
 
         fig, ax = plt.subplots(figsize=(12, 5))
-        colors_c = ["#2ecc71" if m >= 0.8
-                    else "#f39c12" if m >= 0.6
+        colors_c = ["#2ecc71" if mv >= 0.8
+                    else "#f39c12" if mv >= 0.6
                     else "#e74c3c"
-                    for m in cls_means]
-        bars = ax.bar(range(len(cls_names)),
-                      cls_means, color=colors_c,
-                      alpha=0.85,
-                      yerr=cls_stds, capsize=4)
+                    for mv in cls_means]
+        ax.bar(range(len(cls_names)),
+               cls_means, color=colors_c,
+               alpha=0.85,
+               yerr=cls_stds, capsize=4)
         ax.set_xticks(range(len(cls_names)))
         ax.set_xticklabels(
             [c[:14] for c in cls_names],
@@ -953,23 +931,19 @@ def run_inference_custom(df, custom, label_col,
         ax.set_ylim(0, 1.1)
         ax.legend(); ax.grid(axis="y", alpha=0.3)
         plt.tight_layout()
-        p = os.path.join(out_dir, "conf_per_class.png")
+        p = os.path.join(
+            out_dir, "conf_per_class.png")
         fig.savefig(p, bbox_inches="tight")
         plt.close()
         paths.append(("Confidence per Class", p))
     except Exception:
         pass
 
-    # ── 3. Probability Heatmap (top samples) ─────────────
+    # ── 3. Probability Heatmap ────────────────────────────
     try:
-        class_names = list(
-            dict.fromkeys(y_pred))[:10]
         n_show = min(30, len(y_probs))
-        indices = np.random.choice(
-            len(y_probs), n_show, replace=False)
-        indices = sorted(indices)
-
-        # خذ أول 10 classes
+        indices = sorted(np.random.choice(
+            len(y_probs), n_show, replace=False))
         n_cls = min(10, y_probs.shape[1])
         prob_subset = y_probs[indices, :n_cls]
 
@@ -978,33 +952,30 @@ def run_inference_custom(df, custom, label_col,
         im = ax.imshow(
             prob_subset, aspect="auto",
             cmap="YlOrRd", vmin=0, vmax=1)
-        plt.colorbar(im, ax=ax,
-                     label="Probability")
-        ax.set_xlabel("Class")
+        plt.colorbar(im, ax=ax, label="Probability")
+        ax.set_xlabel("Class Index")
         ax.set_ylabel("Sample")
         ax.set_title(
-            "Prediction Probability Heatmap\n"
-            "(sample of predictions)",
+            "Prediction Probability Heatmap",
             fontweight="bold")
         plt.tight_layout()
-        p = os.path.join(out_dir, "prob_heatmap.png")
+        p = os.path.join(
+            out_dir, "prob_heatmap.png")
         fig.savefig(p, bbox_inches="tight")
         plt.close()
         paths.append(("Probability Heatmap", p))
     except Exception:
         pass
 
-    # ── 4. Decision Confidence Breakdown ─────────────────
+    # ── 4. Confidence Breakdown ───────────────────────────
     try:
         bins   = [0, 0.5, 0.6, 0.7, 0.8, 0.9, 1.01]
         labels = ["<50%","50-60%","60-70%",
                   "70-80%","80-90%","90-100%"]
-        counts = []
-        for i in range(len(bins)-1):
-            cnt = np.sum(
-                (y_conf >= bins[i]) &
-                (y_conf < bins[i+1]))
-            counts.append(cnt)
+        counts = [int(np.sum(
+            (y_conf >= bins[i]) &
+            (y_conf < bins[i+1])))
+            for i in range(len(bins)-1)]
 
         fig, ax = plt.subplots(figsize=(10, 5))
         colors_b = ["#e74c3c","#e67e22","#f1c40f",
@@ -1015,8 +986,7 @@ def run_inference_custom(df, custom, label_col,
             ax.text(
                 bar.get_x()+bar.get_width()/2,
                 bar.get_height()+max(counts)*0.01,
-                f"{val:,}", ha="center",
-                fontsize=9)
+                f"{val:,}", ha="center", fontsize=9)
         ax.set_xlabel("Confidence Range")
         ax.set_ylabel("Number of Samples")
         ax.set_title(
@@ -1028,8 +998,7 @@ def run_inference_custom(df, custom, label_col,
             out_dir, "conf_breakdown.png")
         fig.savefig(p, bbox_inches="tight")
         plt.close()
-        paths.append(
-            ("Confidence Breakdown", p))
+        paths.append(("Confidence Breakdown", p))
     except Exception:
         pass
 
