@@ -868,3 +868,169 @@ def run_inference_custom(df, custom, label_col,
         "X_final"      : X_sc,
         "ft_unk_thr"   : ft_unk_thr,
     }
+    def make_explainability_plots(results, models,
+                               out_dir="plots/"):
+    """
+    رسوم قابلية التفسير (Explainability)
+    """
+    os.makedirs(out_dir, exist_ok=True)
+    paths = []
+
+    y_pred  = results["y_pred"]
+    y_probs = results["y_probs"]
+    y_conf  = results["y_conf"]
+
+    # ── 1. Feature Importance (من الـ weights) ────────────
+    try:
+        feat_names = (
+            models.get("features", [])
+            if models else
+            [f"F{i}" for i in range(
+                results["X_final"].shape[1])])
+
+        X = results["X_final"]
+        # حساب variance لكل feature كمؤشر أهمية
+        importance = np.var(X, axis=0)
+        if len(importance) == len(feat_names):
+            idx = np.argsort(importance)[::-1]
+            top_n = min(10, len(feat_names))
+            top_feats = [feat_names[i] for i in idx[:top_n]]
+            top_vals  = importance[idx[:top_n]]
+
+            fig, ax = plt.subplots(figsize=(10, 6))
+            colors = plt.cm.Blues_r(
+                np.linspace(0.3, 0.9, top_n))
+            ax.barh(top_feats[::-1],
+                    top_vals[::-1],
+                    color=colors[::-1], alpha=0.85)
+            ax.set_xlabel("Variance (Importance Proxy)")
+            ax.set_title(
+                "Feature Importance — Top Features",
+                fontweight="bold")
+            ax.grid(axis="x", alpha=0.3)
+            plt.tight_layout()
+            p = os.path.join(
+                out_dir, "feat_importance.png")
+            fig.savefig(p, bbox_inches="tight")
+            plt.close()
+            paths.append(("Feature Importance", p))
+    except Exception:
+        pass
+
+    # ── 2. Confidence per Class ───────────────────────────
+    try:
+        from collections import defaultdict
+        class_conf = defaultdict(list)
+        for pred, conf in zip(y_pred, y_conf):
+            class_conf[pred].append(conf)
+
+        cls_names = list(class_conf.keys())[:12]
+        cls_means = [np.mean(class_conf[c])
+                     for c in cls_names]
+        cls_stds  = [np.std(class_conf[c])
+                     for c in cls_names]
+
+        fig, ax = plt.subplots(figsize=(12, 5))
+        colors_c = ["#2ecc71" if m >= 0.8
+                    else "#f39c12" if m >= 0.6
+                    else "#e74c3c"
+                    for m in cls_means]
+        bars = ax.bar(range(len(cls_names)),
+                      cls_means, color=colors_c,
+                      alpha=0.85,
+                      yerr=cls_stds, capsize=4)
+        ax.set_xticks(range(len(cls_names)))
+        ax.set_xticklabels(
+            [c[:14] for c in cls_names],
+            rotation=45, ha="right", fontsize=9)
+        ax.axhline(0.8, color="gray",
+                   ls="--", lw=1.5,
+                   label="Threshold=0.8")
+        ax.set_ylabel("Mean Confidence")
+        ax.set_title(
+            "Mean Confidence per Class",
+            fontweight="bold")
+        ax.set_ylim(0, 1.1)
+        ax.legend(); ax.grid(axis="y", alpha=0.3)
+        plt.tight_layout()
+        p = os.path.join(out_dir, "conf_per_class.png")
+        fig.savefig(p, bbox_inches="tight")
+        plt.close()
+        paths.append(("Confidence per Class", p))
+    except Exception:
+        pass
+
+    # ── 3. Probability Heatmap (top samples) ─────────────
+    try:
+        class_names = list(
+            dict.fromkeys(y_pred))[:10]
+        n_show = min(30, len(y_probs))
+        indices = np.random.choice(
+            len(y_probs), n_show, replace=False)
+        indices = sorted(indices)
+
+        # خذ أول 10 classes
+        n_cls = min(10, y_probs.shape[1])
+        prob_subset = y_probs[indices, :n_cls]
+
+        fig, ax = plt.subplots(
+            figsize=(12, max(6, n_show*0.25)))
+        im = ax.imshow(
+            prob_subset, aspect="auto",
+            cmap="YlOrRd", vmin=0, vmax=1)
+        plt.colorbar(im, ax=ax,
+                     label="Probability")
+        ax.set_xlabel("Class")
+        ax.set_ylabel("Sample")
+        ax.set_title(
+            "Prediction Probability Heatmap\n"
+            "(sample of predictions)",
+            fontweight="bold")
+        plt.tight_layout()
+        p = os.path.join(out_dir, "prob_heatmap.png")
+        fig.savefig(p, bbox_inches="tight")
+        plt.close()
+        paths.append(("Probability Heatmap", p))
+    except Exception:
+        pass
+
+    # ── 4. Decision Confidence Breakdown ─────────────────
+    try:
+        bins   = [0, 0.5, 0.6, 0.7, 0.8, 0.9, 1.01]
+        labels = ["<50%","50-60%","60-70%",
+                  "70-80%","80-90%","90-100%"]
+        counts = []
+        for i in range(len(bins)-1):
+            cnt = np.sum(
+                (y_conf >= bins[i]) &
+                (y_conf < bins[i+1]))
+            counts.append(cnt)
+
+        fig, ax = plt.subplots(figsize=(10, 5))
+        colors_b = ["#e74c3c","#e67e22","#f1c40f",
+                    "#2ecc71","#27ae60","#1abc9c"]
+        bars = ax.bar(labels, counts,
+                      color=colors_b, alpha=0.85)
+        for bar, val in zip(bars, counts):
+            ax.text(
+                bar.get_x()+bar.get_width()/2,
+                bar.get_height()+max(counts)*0.01,
+                f"{val:,}", ha="center",
+                fontsize=9)
+        ax.set_xlabel("Confidence Range")
+        ax.set_ylabel("Number of Samples")
+        ax.set_title(
+            "Decision Confidence Breakdown",
+            fontweight="bold")
+        ax.grid(axis="y", alpha=0.3)
+        plt.tight_layout()
+        p = os.path.join(
+            out_dir, "conf_breakdown.png")
+        fig.savefig(p, bbox_inches="tight")
+        plt.close()
+        paths.append(
+            ("Confidence Breakdown", p))
+    except Exception:
+        pass
+
+    return paths
