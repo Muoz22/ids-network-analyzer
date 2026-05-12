@@ -278,7 +278,6 @@ with st.sidebar:
     st.markdown("---")
     st.markdown("### 📊 النموذج")
 
-    # ── عرض النموذج بدون Accuracy أو dataset name ─────────
     if models_global and "meta" in models_global:
         meta = models_global["meta"]
         st.success("✅ AI Agents IDS")
@@ -442,6 +441,12 @@ with tab1:
                      use_container_width=True,
                      key="btn_analyze"):
 
+            # ── امسح النتائج القديمة دائماً ───────────────
+            for _k in ["results", "plot_bytes",
+                       "exp_bytes"]:
+                if _k in st.session_state:
+                    del st.session_state[_k]
+
             progress = st.progress(0)
             status   = st.empty()
 
@@ -450,7 +455,8 @@ with tab1:
                 from inference import (
                     run_inference,
                     run_inference_custom,
-                    make_plots)
+                    make_plots,
+                    make_explainability_plots)
 
                 status.text("🔍 فحص التوافق...")
                 progress.progress(10)
@@ -462,7 +468,8 @@ with tab1:
                 status.text("🤖 تشغيل التحليل...")
                 progress.progress(50)
 
-                if "_auto_custom_model" in st.session_state:
+                if "_auto_custom_model" in \
+                        st.session_state:
                     auto_cm = st.session_state[
                         "_auto_custom_model"]
                     auto_lc = st.session_state[
@@ -489,7 +496,7 @@ with tab1:
                         "🔵 Original (FT-Transformer)"
 
                 status.text("📊 إنتاج الرسوم...")
-                progress.progress(80)
+                progress.progress(70)
 
                 final_bl = (
                     st.session_state["_auto_custom_meta"]
@@ -498,7 +505,9 @@ with tab1:
                     st.session_state
                     else use_bl)
 
-                with tempfile.TemporaryDirectory() as tmp:
+                # ── رسوم أساسية ───────────────────────────
+                with tempfile.TemporaryDirectory() \
+                        as tmp:
                     plot_paths = make_plots(
                         results, final_bl,
                         out_dir=tmp,
@@ -512,12 +521,41 @@ with tab1:
                         except Exception:
                             pass
 
+                # ── رسوم قابلية التفسير ───────────────────
+                status.text(
+                    "🔬 حساب قابلية التفسير...")
+                progress.progress(85)
+
+                exp_bytes = []
+                with tempfile.TemporaryDirectory() \
+                        as tmp2:
+                    try:
+                        exp_paths = \
+                            make_explainability_plots(
+                                results,
+                                models_global,
+                                out_dir=tmp2)
+                        for title, path in exp_paths:
+                            try:
+                                with open(
+                                        path, "rb") as f:
+                                    exp_bytes.append(
+                                        (title,
+                                         f.read()))
+                            except Exception:
+                                pass
+                    except Exception:
+                        pass
+
                 progress.progress(100)
                 status.text("✅ اكتمل!")
 
+                # ── حفظ في session_state ───────────────────
                 st.session_state["results"]    = results
                 st.session_state["plot_bytes"] = plot_bytes
+                st.session_state["exp_bytes"]  = exp_bytes
 
+                # ── إحصاءات ───────────────────────────────
                 st.markdown("---")
                 st.markdown("## 🏆 نتائج التحليل")
 
@@ -549,12 +587,14 @@ with tab1:
                     for col, (name, val, hi, lo) in zip(
                             [mc1,mc2,mc3], [
                                 ("Accuracy",
-                                 m["accuracy"]*100,97,93),
+                                 m["accuracy"]*100,
+                                 97,93),
                                 ("Weighted F1",
                                  m["weighted_f1"]*100,
                                  95,90),
                                 ("Macro F1",
-                                 m["macro_f1"]*100,80,60),
+                                 m["macro_f1"]*100,
+                                 80,60),
                             ]):
                         with col:
                             cl = ("status-excellent"
@@ -577,17 +617,37 @@ with tab1:
                     atk_df["النسبة %"] = (
                         atk_df["العدد"]/total*100
                     ).round(2)
-                    st.dataframe(atk_df,
-                                 use_container_width=True)
+                    st.dataframe(
+                        atk_df,
+                        use_container_width=True)
 
                 if plot_bytes:
                     st.markdown("### 📊 الرسوم البيانية")
-                    for i in range(0, len(plot_bytes), 2):
+                    for i in range(
+                            0, len(plot_bytes), 2):
                         cols = st.columns(2)
-                        for j, (title, img) in enumerate(
-                                plot_bytes[i:i+2]):
+                        for j, (title, img) in \
+                                enumerate(
+                                    plot_bytes[i:i+2]):
                             with cols[j]:
-                                st.markdown(f"**{title}**")
+                                st.markdown(
+                                    f"**{title}**")
+                                st.image(
+                                    img,
+                                    use_column_width=True)
+
+                if exp_bytes:
+                    st.markdown(
+                        "### 🔬 قابلية التفسير")
+                    for i in range(
+                            0, len(exp_bytes), 2):
+                        cols = st.columns(2)
+                        for j, (title, img) in \
+                                enumerate(
+                                    exp_bytes[i:i+2]):
+                            with cols[j]:
+                                st.markdown(
+                                    f"**{title}**")
                                 st.image(
                                     img,
                                     use_column_width=True)
@@ -636,47 +696,6 @@ with tab1:
                     use_container_width=True,
                     key="download_tab1_csv")
 
-                # ── رسوم التفسير ──────────────────────────
-                try:
-                    from inference import \
-                        make_explainability_plots
-                    with tempfile.TemporaryDirectory() \
-                            as tmp2:
-                        exp_paths = \
-                            make_explainability_plots(
-                                results,
-                                models_global,
-                                out_dir=tmp2)
-                        exp_bytes = []
-                        for title, path in exp_paths:
-                            try:
-                                with open(
-                                        path, "rb") as f:
-                                    exp_bytes.append(
-                                        (title,
-                                         f.read()))
-                            except Exception:
-                                pass
-
-                    if exp_bytes:
-                        st.markdown(
-                            "### 🔬 قابلية التفسير")
-                        for i in range(
-                                0, len(exp_bytes), 2):
-                            cols = st.columns(2)
-                            for j, (title, img) in \
-                                    enumerate(
-                                        exp_bytes[i:i+2]):
-                                with cols[j]:
-                                    st.markdown(
-                                        f"**{title}**")
-                                    st.image(
-                                        img,
-                                        use_column_width=True)
-                        st.session_state[
-                            "exp_bytes"] = exp_bytes
-                except Exception:
-                    pass
                 st.info(
                     "💡 انتقل لـ **📊 تقرير تفصيلي** "
                     "لرؤية كل الرسوم والتحليل الكامل")
@@ -693,6 +712,8 @@ with tab2:
     else:
         results    = st.session_state["results"]
         plot_bytes = st.session_state["plot_bytes"]
+        exp_bytes  = st.session_state.get(
+            "exp_bytes", [])
         m          = results["metrics"]
 
         total   = results["n_samples"]
@@ -713,6 +734,7 @@ with tab2:
                       f"{100*unknown/total:.1f}%",
                       delta_color="inverse")
 
+        # ── Decision Analysis ──────────────────────────────
         st.markdown("---")
         st.markdown("### 🎯 Decision Analysis")
         pie_imgs = [(t,img) for t,img in plot_bytes
@@ -731,6 +753,7 @@ with tab2:
                 st.image(atk_imgs[0][1],
                          use_column_width=True)
 
+        # ── Classification Performance ─────────────────────
         if "accuracy" in m:
             st.markdown("---")
             st.markdown(
@@ -756,11 +779,12 @@ with tab2:
                         f'{name}</p>',
                         unsafe_allow_html=True)
 
-            conf_imgs = [(t,img) for t,img in plot_bytes
-                         if "Confusion" in t]
-            f1_imgs   = [(t,img) for t,img in plot_bytes
-                         if "F1" in t]
-            if conf_imgs or f1_imgs:
+            # Confusion Matrix + Training Curves جنب بعض
+            conf_imgs  = [(t,img) for t,img in plot_bytes
+                          if "Confusion" in t]
+            train_imgs = [(t,img) for t,img in plot_bytes
+                          if "Training" in t]
+            if conf_imgs or train_imgs:
                 pfc1, pfc2 = st.columns(2)
                 with pfc1:
                     if conf_imgs:
@@ -768,10 +792,17 @@ with tab2:
                         st.image(conf_imgs[0][1],
                                  use_column_width=True)
                 with pfc2:
-                    if f1_imgs:
-                        st.markdown("**Per-Class F1**")
-                        st.image(f1_imgs[0][1],
+                    if train_imgs:
+                        st.markdown("**Training Curves**")
+                        st.image(train_imgs[0][1],
                                  use_column_width=True)
+
+            f1_imgs = [(t,img) for t,img in plot_bytes
+                       if "F1" in t]
+            if f1_imgs:
+                st.markdown("**Per-Class F1**")
+                st.image(f1_imgs[0][1],
+                         use_column_width=True)
 
             if "report" in m:
                 st.markdown("---")
@@ -779,6 +810,7 @@ with tab2:
                     "### 📋 Classification Report")
                 st.code(m["report"])
 
+        # ── Confidence Analysis ────────────────────────────
         st.markdown("---")
         st.markdown("### 🎚️ Confidence Analysis")
         conf_imgs = [(t,img) for t,img in plot_bytes
@@ -787,6 +819,7 @@ with tab2:
             st.image(conf_imgs[0][1],
                      use_column_width=True)
 
+        # ── Drift Analysis ─────────────────────────────────
         st.markdown("---")
         st.markdown("### 🌊 Drift Analysis")
         drift_imgs = [(t,img) for t,img in plot_bytes
@@ -795,16 +828,10 @@ with tab2:
             st.image(drift_imgs[0][1],
                      use_column_width=True)
 
-        st.markdown("---")
-        st.markdown("### 🗂️ Summary Dashboard")
-        dash_imgs = [(t,img) for t,img in plot_bytes
-                     if "Dashboard" in t or
-                     "Summary" in t]
         # ── Explainability ─────────────────────────────────
-        if "exp_bytes" in st.session_state:
+        if exp_bytes:
             st.markdown("---")
             st.markdown("### 🔬 قابلية التفسير")
-            exp_bytes = st.session_state["exp_bytes"]
             for i in range(0, len(exp_bytes), 2):
                 cols = st.columns(2)
                 for j, (title, img) in enumerate(
@@ -813,20 +840,30 @@ with tab2:
                         st.markdown(f"**{title}**")
                         st.image(img,
                                  use_column_width=True)
+
+        # ── Summary Dashboard ──────────────────────────────
+        st.markdown("---")
+        st.markdown("### 🗂️ Summary Dashboard")
+        dash_imgs = [(t,img) for t,img in plot_bytes
+                     if "Dashboard" in t or
+                     "Summary" in t]
         if dash_imgs:
             st.image(dash_imgs[0][1],
                      use_column_width=True)
 
+        # ── All Plots ──────────────────────────────────────
         st.markdown("---")
         st.markdown("### 🖼️ كل الرسوم البيانية")
-        for i in range(0, len(plot_bytes), 2):
+        all_imgs = plot_bytes + exp_bytes
+        for i in range(0, len(all_imgs), 2):
             cols = st.columns(2)
             for j, (title, img) in enumerate(
-                    plot_bytes[i:i+2]):
+                    all_imgs[i:i+2]):
                 with cols[j]:
                     st.markdown(f"**{title}**")
                     st.image(img, use_column_width=True)
 
+        # ── Download ───────────────────────────────────────
         st.markdown("---")
         st.markdown("### 📥 تحميل النتائج")
         result_df = pd.DataFrame({
@@ -913,7 +950,7 @@ with tab3:
   → تدريب تلقائي RandomForest (خلف الكواليس)
   → تحليل بالنموذج الجديد
      ↓
-النتائج: ALLOW / BLOCK / QUARANTINE + 10 رسوم
+النتائج: ALLOW / BLOCK / QUARANTINE + رسوم + قابلية تفسير
     """)
 
 
