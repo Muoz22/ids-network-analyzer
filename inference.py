@@ -15,8 +15,13 @@ from sklearn.metrics import (
     precision_recall_curve, roc_curve, auc)
 from datetime import datetime
 
+# مسار النموذج الافتراضي
+_MODEL_DIR = "models/"
+
 
 def load_models(model_dir: str = "models/"):
+    global _MODEL_DIR
+    _MODEL_DIR = model_dir
     import onnxruntime as ort
 
     models = {}
@@ -58,6 +63,26 @@ def load_models(model_dir: str = "models/"):
         models["scaler"] = pickle.load(f)
     print(f"✅ Scaler: "
           f"{models['scaler'].n_features_in_} features")
+
+    # تحميل Training History إذا موجود
+    hist_path = os.path.join(
+        model_dir, "training_history.json")
+    if os.path.exists(hist_path):
+        with open(hist_path) as f:
+            models["training_history"] = json.load(f)
+        print(f"✅ training_history.json loaded — "
+              f"{len(models['training_history']['loss'])}"
+              f" epochs")
+
+    # تحميل Feature Importance إذا موجود
+    fi_path = os.path.join(
+        model_dir, "feat_importance.json")
+    if os.path.exists(fi_path):
+        with open(fi_path) as f:
+            models["feat_importance"] = json.load(f)
+        print(f"✅ feat_importance.json loaded — "
+              f"{len(models['feat_importance']['features'])}"
+              f" features")
 
     return models
 
@@ -469,7 +494,7 @@ def make_plots(results, benign_label, out_dir="plots/"):
     except Exception:
         pass
 
-    # ── 8. ROC & PR Curves ────────────────────────────────
+    # ── 8. PR Curve فقط (بدون ROC) ───────────────────────
     if "y_true" in m:
         try:
             y_true   = m["y_true"]
@@ -477,40 +502,29 @@ def make_plots(results, benign_label, out_dir="plots/"):
                 [0 if y==benign_label else 1
                  for y in y_true])
             y_scores = 1 - y_conf
-            fpr, tpr, _ = roc_curve(y_bin, y_scores)
-            roc_auc     = auc(fpr, tpr)
-            fig, axes = plt.subplots(1, 2,
-                                     figsize=(14, 5))
-            axes[0].plot(fpr, tpr, color="#3498db",
-                         lw=2,
-                         label=f"ROC (AUC={roc_auc:.3f})")
-            axes[0].plot([0,1],[0,1],"k--", lw=1)
-            axes[0].set_xlabel("False Positive Rate")
-            axes[0].set_ylabel("True Positive Rate")
-            axes[0].set_title("ROC Curve",
-                              fontweight="bold")
-            axes[0].legend()
-            axes[0].grid(alpha=0.3)
+
             prec, rec, _ = precision_recall_curve(
                 y_bin, y_scores)
             pr_auc = auc(rec, prec)
-            axes[1].plot(rec, prec, color="#e74c3c",
-                         lw=2,
-                         label=f"PR (AUC={pr_auc:.3f})")
-            axes[1].set_xlabel("Recall")
-            axes[1].set_ylabel("Precision")
-            axes[1].set_title(
+
+            fig, ax = plt.subplots(figsize=(8, 6))
+            ax.plot(rec, prec, color="#e74c3c",
+                    lw=2,
+                    label=f"PR (AUC={pr_auc:.3f})")
+            ax.fill_between(rec, prec,
+                            alpha=0.1, color="#e74c3c")
+            ax.set_xlabel("Recall")
+            ax.set_ylabel("Precision")
+            ax.set_title(
                 "Precision-Recall Curve",
                 fontweight="bold")
-            axes[1].legend()
-            axes[1].grid(alpha=0.3)
-            plt.suptitle("ROC & PR Curves",
-                         fontweight="bold")
+            ax.legend()
+            ax.grid(alpha=0.3)
             plt.tight_layout()
-            p = os.path.join(out_dir, "roc_pr.png")
+            p = os.path.join(out_dir, "pr_curve.png")
             fig.savefig(p, bbox_inches="tight")
             plt.close()
-            paths.append(("ROC & PR Curves", p))
+            paths.append(("PR Curve", p))
         except Exception:
             pass
 
@@ -858,45 +872,204 @@ def make_explainability_plots(results, models,
     y_probs = results["y_probs"]
     y_conf  = results["y_conf"]
 
-    # ── 1. Feature Importance ─────────────────────────────
+    # ── 1. Training Curves من training_history.json ───────
     try:
-        feat_names = (
-            models.get("features", [])
-            if models else [])
-        X = results["X_final"]
+        hist = None
+        if models and "training_history" in models:
+            hist = models["training_history"]
+        else:
+            # حاول قراءة الملف مباشرة
+            hist_path = os.path.join(
+                _MODEL_DIR, "training_history.json")
+            if os.path.exists(hist_path):
+                with open(hist_path) as f:
+                    hist = json.load(f)
 
-        if len(feat_names) == 0:
-            feat_names = [f"F{i}"
-                          for i in range(X.shape[1])]
+        if hist and len(hist.get("loss", [])) > 0:
+            epochs = range(1, len(hist["loss"])+1)
 
-        importance = np.var(X, axis=0)
-        if len(importance) == len(feat_names):
-            idx     = np.argsort(importance)[::-1]
-            top_n   = min(10, len(feat_names))
-            top_f   = [feat_names[i]
-                       for i in idx[:top_n]]
-            top_v   = importance[idx[:top_n]]
+            fig, axes = plt.subplots(
+                1, 2, figsize=(14, 5))
+
+            # Loss
+            axes[0].plot(epochs, hist["loss"],
+                         color="#3498db", lw=2,
+                         label="Train Loss")
+            axes[0].plot(epochs, hist["val_loss"],
+                         color="#e74c3c", lw=2,
+                         ls="--", label="Val Loss")
+            best_ep = int(np.argmin(
+                hist["val_loss"])) + 1
+            best_vl = min(hist["val_loss"])
+            axes[0].axvline(
+                best_ep, color="gray",
+                ls=":", lw=1.5,
+                label=f"Best epoch={best_ep}")
+            axes[0].annotate(
+                f"min={best_vl:.4f}",
+                xy=(best_ep, best_vl),
+                xytext=(best_ep+1, best_vl+0.01),
+                fontsize=8, color="#e74c3c")
+            axes[0].set_xlabel("Epoch")
+            axes[0].set_ylabel("Loss")
+            axes[0].set_title(
+                "Agent 4 — Training Loss",
+                fontweight="bold")
+            axes[0].legend()
+            axes[0].grid(alpha=0.3)
+
+            # Accuracy
+            if hist.get("accuracy"):
+                axes[1].plot(
+                    epochs, hist["accuracy"],
+                    color="#2ecc71", lw=2,
+                    label="Train Accuracy")
+                axes[1].plot(
+                    epochs, hist["val_accuracy"],
+                    color="#f39c12", lw=2,
+                    ls="--", label="Val Accuracy")
+                best_ep_a = int(np.argmax(
+                    hist["val_accuracy"])) + 1
+                best_va   = max(hist["val_accuracy"])
+                axes[1].axvline(
+                    best_ep_a, color="gray",
+                    ls=":", lw=1.5,
+                    label=f"Best epoch={best_ep_a}")
+                axes[1].annotate(
+                    f"max={best_va:.4f}",
+                    xy=(best_ep_a, best_va),
+                    xytext=(best_ep_a+1,
+                            best_va-0.02),
+                    fontsize=8, color="#f39c12")
+                axes[1].set_xlabel("Epoch")
+                axes[1].set_ylabel("Accuracy")
+                axes[1].set_title(
+                    "Agent 4 — Training Accuracy",
+                    fontweight="bold")
+                axes[1].legend()
+                axes[1].grid(alpha=0.3)
+
+            plt.suptitle(
+                f"Agent 4 — Training Curves  "
+                f"({len(hist['loss'])} epochs)",
+                fontweight="bold")
+            plt.tight_layout()
+            p = os.path.join(
+                out_dir, "training_curves.png")
+            fig.savefig(p, bbox_inches="tight")
+            plt.close()
+            paths.append(("Training Curves", p))
+    except Exception:
+        pass
+
+    # ── 2. SHAP Summary Plot (Bar) ────────────────────────
+    try:
+        fi = None
+        if models and "feat_importance" in models:
+            fi = models["feat_importance"]
+        else:
+            fi_path = os.path.join(
+                _MODEL_DIR, "feat_importance.json")
+            if os.path.exists(fi_path):
+                with open(fi_path) as f:
+                    fi = json.load(f)
+
+        if fi:
+            feats = fi["features"]
+            imp   = np.array(fi["importance"])
+            std   = np.array(fi.get(
+                "std", np.zeros_like(imp)))
+
+            # ترتيب تنازلي
+            idx    = np.argsort(imp)[::-1]
+            top_n  = min(10, len(feats))
+            t_f    = [feats[i] for i in idx[:top_n]]
+            t_v    = imp[idx[:top_n]]
+            t_s    = std[idx[:top_n]]
+
+            # SHAP Summary Bar
             fig, ax = plt.subplots(figsize=(10, 6))
-            colors  = plt.cm.Blues_r(
-                np.linspace(0.3, 0.9, top_n))
-            ax.barh(top_f[::-1], top_v[::-1],
-                    color=colors[::-1], alpha=0.85)
+            colors_s = plt.cm.RdYlGn_r(
+                np.linspace(0.1, 0.9, top_n))
+            bars = ax.barh(
+                t_f[::-1], t_v[::-1],
+                xerr=t_s[::-1],
+                color=colors_s[::-1],
+                alpha=0.85, capsize=4)
+            for bar, val in zip(bars, t_v[::-1]):
+                ax.text(
+                    val + max(t_v)*0.01,
+                    bar.get_y()+bar.get_height()/2,
+                    f"{val:.4f}",
+                    va="center", fontsize=9)
             ax.set_xlabel(
-                "Variance (Importance Proxy)")
+                "Mean |SHAP Value| "
+                "(Feature Importance)")
             ax.set_title(
-                "Feature Importance — Top Features",
+                "SHAP Summary — Feature Impact "
+                "on Model Output",
                 fontweight="bold")
             ax.grid(axis="x", alpha=0.3)
             plt.tight_layout()
             p = os.path.join(
-                out_dir, "feat_importance.png")
+                out_dir, "shap_summary.png")
             fig.savefig(p, bbox_inches="tight")
             plt.close()
-            paths.append(("Feature Importance", p))
+            paths.append(("SHAP Summary", p))
+
+            # SHAP Waterfall Plot
+            fig, ax = plt.subplots(figsize=(10, 6))
+            # Base value
+            base_val = float(np.mean(t_v))
+            cumsum   = np.cumsum(
+                t_v[::-1]) - base_val
+            x_pos    = np.arange(top_n)
+
+            colors_w = ["#2ecc71" if v >= 0
+                        else "#e74c3c"
+                        for v in t_v[::-1]]
+            ax.barh(x_pos, t_v[::-1],
+                    color=colors_w, alpha=0.85,
+                    left=0)
+
+            # خط الـ base
+            ax.axvline(0, color="black",
+                       lw=1.5, ls="-")
+            ax.axvline(base_val, color="#3498db",
+                       lw=1.5, ls="--",
+                       label=f"Base={base_val:.4f}")
+
+            ax.set_yticks(x_pos)
+            ax.set_yticklabels(
+                t_f[::-1], fontsize=10)
+            for i, val in enumerate(t_v[::-1]):
+                ax.text(
+                    val + (max(t_v)*0.01
+                           if val >= 0
+                           else -max(t_v)*0.01),
+                    i,
+                    f"{val:+.4f}",
+                    va="center",
+                    ha="left" if val >= 0
+                    else "right",
+                    fontsize=9)
+            ax.set_xlabel("SHAP Value Impact")
+            ax.set_title(
+                "SHAP Waterfall — Feature "
+                "Contribution per Feature",
+                fontweight="bold")
+            ax.legend()
+            ax.grid(axis="x", alpha=0.3)
+            plt.tight_layout()
+            p = os.path.join(
+                out_dir, "shap_waterfall.png")
+            fig.savefig(p, bbox_inches="tight")
+            plt.close()
+            paths.append(("SHAP Waterfall", p))
     except Exception:
         pass
 
-    # ── 2. Confidence per Class ───────────────────────────
+    # ── 3. Confidence per Class ───────────────────────────
     try:
         class_conf = defaultdict(list)
         for pred, conf in zip(y_pred, y_conf):
@@ -939,7 +1112,7 @@ def make_explainability_plots(results, models,
     except Exception:
         pass
 
-    # ── 3. Probability Heatmap ────────────────────────────
+    # ── 4. Probability Heatmap ────────────────────────────
     try:
         n_show = min(30, len(y_probs))
         indices = sorted(np.random.choice(
@@ -967,7 +1140,7 @@ def make_explainability_plots(results, models,
     except Exception:
         pass
 
-    # ── 4. Confidence Breakdown ───────────────────────────
+    # ── 5. Confidence Breakdown ───────────────────────────
     try:
         bins   = [0, 0.5, 0.6, 0.7, 0.8, 0.9, 1.01]
         labels = ["<50%","50-60%","60-70%",
