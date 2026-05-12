@@ -63,7 +63,6 @@ def load_models(model_dir: str = "models/"):
     print(f"✅ Scaler: "
           f"{models['scaler'].n_features_in_} features")
 
-    # تحميل Training History
     hist_path = os.path.join(
         model_dir, "training_history.json")
     if os.path.exists(hist_path):
@@ -255,25 +254,20 @@ def run_inference(df, models, label_col,
         "elapsed_sec"  : elapsed,
         "X_final"      : X_final,
         "ft_unk_thr"   : ft_unk_thr,
+        # ← feat_names من النموذج الأصلي
+        "feat_names"   : models["features"],
     }
 
 
 def _compute_shap_values(X, y_probs, feat_names):
-    """
-    يحسب SHAP-style values من البيانات الفعلية:
-    لكل feature نحسب Pearson correlation مع max_prob
-    وكذلك mean absolute deviation من الـ mean
-    → يعطي قيمة حقيقية من الداتاست الحالية
-    """
-    n_feat    = X.shape[1]
-    max_prob  = y_probs.max(axis=1)
+    n_feat   = X.shape[1]
+    max_prob = y_probs.max(axis=1)
 
     shap_vals = np.zeros(n_feat)
     shap_sign = np.zeros(n_feat)
 
     for i in range(n_feat):
         feat_col = X[:, i]
-        # correlation مع الـ confidence
         if feat_col.std() > 1e-8:
             corr = np.corrcoef(
                 feat_col, max_prob)[0, 1]
@@ -282,7 +276,6 @@ def _compute_shap_values(X, y_probs, feat_names):
         else:
             corr = 0.0
 
-        # mean absolute impact
         mean_f = feat_col.mean()
         dev    = np.abs(feat_col - mean_f)
         impact = np.mean(dev * np.abs(
@@ -291,7 +284,6 @@ def _compute_shap_values(X, y_probs, feat_names):
         shap_vals[i] = impact
         shap_sign[i] = np.sign(corr)
 
-    # normalize
     total = shap_vals.sum()
     if total > 0:
         shap_vals = shap_vals / total
@@ -302,9 +294,6 @@ def _compute_shap_values(X, y_probs, feat_names):
 def make_plots(results, benign_label,
                out_dir="plots/",
                models_ref=None):
-    """
-    models_ref: النماذج المحملة (لقراءة training_history)
-    """
     os.makedirs(out_dir, exist_ok=True)
     paths = []
 
@@ -406,9 +395,8 @@ def make_plots(results, benign_label,
     except Exception:
         pass
 
-    # ── 4. Confusion Matrix + Training Curves ─────────────
+    # ── 4. Confusion Matrix ───────────────────────────────
     if "cm_true" in m:
-        # Confusion Matrix
         try:
             y_true  = m["cm_true"]
             present = sorted(
@@ -437,7 +425,7 @@ def make_plots(results, benign_label,
         except Exception:
             pass
 
-    # ── Training Curves (بجانب CM) ────────────────────────
+    # ── Training Curves ───────────────────────────────────
     try:
         hist = None
         if models_ref and \
@@ -455,7 +443,6 @@ def make_plots(results, benign_label,
             fig, axes = plt.subplots(
                 1, 2, figsize=(14, 5))
 
-            # Loss curve
             axes[0].plot(
                 epochs, hist["loss"],
                 color="#3498db", lw=2,
@@ -474,8 +461,7 @@ def make_plots(results, benign_label,
             axes[0].annotate(
                 f"min={best_vl:.4f}",
                 xy=(best_ep, best_vl),
-                xytext=(best_ep+1,
-                        best_vl+0.005),
+                xytext=(best_ep+1, best_vl+0.005),
                 fontsize=8, color="#e74c3c",
                 arrowprops=dict(
                     arrowstyle="->",
@@ -488,7 +474,6 @@ def make_plots(results, benign_label,
             axes[0].legend()
             axes[0].grid(alpha=0.3)
 
-            # Accuracy curve
             if hist.get("accuracy"):
                 axes[1].plot(
                     epochs, hist["accuracy"],
@@ -496,8 +481,7 @@ def make_plots(results, benign_label,
                     label="Train Accuracy")
                 axes[1].plot(
                     epochs, hist["val_accuracy"],
-                    color="#f39c12", lw=2,
-                    ls="--",
+                    color="#f39c12", lw=2, ls="--",
                     label="Val Accuracy")
                 best_ep_a = int(np.argmax(
                     hist["val_accuracy"])) + 1
@@ -991,6 +975,8 @@ def run_inference_custom(df, custom, label_col,
         "elapsed_sec"  : elapsed,
         "X_final"      : X_sc,
         "ft_unk_thr"   : ft_unk_thr,
+        # ← feat_names من النموذج المخصص
+        "feat_names"   : train_feats,
     }
 
 
@@ -1007,22 +993,36 @@ def make_explainability_plots(results, models,
     y_probs = results["y_probs"]
     y_conf  = results["y_conf"]
     X       = results["X_final"]
+    n_feats = X.shape[1]
 
-    # أسماء الـ features
-    feat_names = []
-    if models and "features" in models:
-        feat_names = models["features"]
-    if len(feat_names) == 0:
-        feat_names = [f"F{i}"
-                      for i in range(X.shape[1])]
+    # ── أسماء الـ features — دائماً من النتائج ────────────
+    # هذا يضمن التوافق مع أي نموذج (أصلي أو مخصص)
+    feat_names = results.get("feat_names", [])
+
+    # تأكد من التوافق مع حجم X
+    if len(feat_names) != n_feats:
+        # محاولة من الـ models
+        if models and "features" in models:
+            orig = models["features"]
+            if len(orig) == n_feats:
+                feat_names = orig
+            else:
+                feat_names = [
+                    f"Feature_{i}"
+                    for i in range(n_feats)]
+        else:
+            feat_names = [
+                f"Feature_{i}"
+                for i in range(n_feats)]
+
+    feat_names = list(feat_names)[:n_feats]
 
     # ── حساب SHAP values من الداتاست الفعلية ─────────────
     shap_vals, shap_sign = _compute_shap_values(
         X, y_probs, feat_names)
 
-    # ترتيب تنازلي
     idx   = np.argsort(shap_vals)[::-1]
-    top_n = min(len(feat_names), X.shape[1])
+    top_n = min(len(feat_names), n_feats)
     t_f   = [feat_names[i] for i in idx[:top_n]]
     t_v   = shap_vals[idx[:top_n]]
     t_sgn = shap_sign[idx[:top_n]]
@@ -1030,24 +1030,18 @@ def make_explainability_plots(results, models,
     # ── 1. SHAP Summary Bar Plot ──────────────────────────
     try:
         fig, ax = plt.subplots(figsize=(10, 6))
-
-        # لون كل بار بناءً على الـ sign
         colors_s = ["#e74c3c" if s >= 0
                     else "#3498db"
                     for s in t_sgn[::-1]]
-
         bars = ax.barh(
             t_f[::-1], t_v[::-1],
             color=colors_s, alpha=0.85)
-
         for bar, val in zip(bars, t_v[::-1]):
             ax.text(
                 val + max(t_v)*0.01,
                 bar.get_y()+bar.get_height()/2,
                 f"{val:.4f}",
                 va="center", fontsize=9)
-
-        # Legend
         from matplotlib.patches import Patch
         legend_els = [
             Patch(color="#e74c3c",
@@ -1056,7 +1050,6 @@ def make_explainability_plots(results, models,
                   label="Negative impact (−)")]
         ax.legend(handles=legend_els,
                   loc="lower right")
-
         ax.set_xlabel(
             "Mean |SHAP Value| "
             "(Impact on Model Output)")
@@ -1076,18 +1069,14 @@ def make_explainability_plots(results, models,
     # ── 2. SHAP Waterfall Plot ────────────────────────────
     try:
         fig, ax = plt.subplots(figsize=(10, 6))
-
-        base_val = float(np.mean(y_conf))
-        x_pos    = np.arange(top_n)
-
-        # رسم الـ waterfall
+        base_val   = float(np.mean(y_conf))
+        x_pos      = np.arange(top_n)
         cumulative = base_val
         lefts      = []
         widths     = []
         colors_w   = []
 
-        for i, (val, sgn) in enumerate(
-                zip(t_v[::-1], t_sgn[::-1])):
+        for val, sgn in zip(t_v[::-1], t_sgn[::-1]):
             signed_val = val * (1 if sgn >= 0 else -1)
             lefts.append(
                 cumulative if signed_val >= 0
@@ -1101,16 +1090,12 @@ def make_explainability_plots(results, models,
         ax.barh(x_pos, widths, left=lefts,
                 color=colors_w, alpha=0.85,
                 height=0.6)
-
-        # خط الـ base و final
         ax.axvline(base_val, color="#2c3e50",
                    lw=1.5, ls="--",
                    label=f"E[f(X)]={base_val:.3f}")
         ax.axvline(cumulative, color="#27ae60",
                    lw=1.5, ls=":",
                    label=f"f(x)={cumulative:.3f}")
-
-        # labels
         ax.set_yticks(x_pos)
         ax.set_yticklabels(t_f[::-1], fontsize=10)
 
@@ -1121,11 +1106,11 @@ def make_explainability_plots(results, models,
                 l + w/2, i,
                 f"{val:+.4f}",
                 va="center", ha="center",
-                fontsize=8,
-                color="white",
+                fontsize=8, color="white",
                 fontweight="bold")
 
-        ax.set_xlabel("SHAP Value (Cumulative Impact)")
+        ax.set_xlabel(
+            "SHAP Value (Cumulative Impact)")
         ax.set_title(
             "SHAP Waterfall — Feature Contribution\n"
             f"Base={base_val:.3f} → "
@@ -1186,10 +1171,10 @@ def make_explainability_plots(results, models,
 
     # ── 4. Probability Heatmap ────────────────────────────
     try:
-        n_show = min(30, len(y_probs))
+        n_show  = min(30, len(y_probs))
         indices = sorted(np.random.choice(
             len(y_probs), n_show, replace=False))
-        n_cls = min(10, y_probs.shape[1])
+        n_cls       = min(10, y_probs.shape[1])
         prob_subset = y_probs[indices, :n_cls]
 
         fig, ax = plt.subplots(
